@@ -1,39 +1,24 @@
 {
   "milestone": "core-engine",
-  "round": 1,
-  "status": "fail",
+  "round": 2,
+  "status": "pass",
   "assertionsSummary": {
     "total": 26,
-    "passed": 24,
-    "failed": 2,
+    "passed": 26,
+    "failed": 0,
     "blocked": 0
   },
   "passedAssertions": [
     "VAL-IDX-001", "VAL-IDX-002", "VAL-IDX-003", "VAL-IDX-004", "VAL-IDX-005",
-    "VAL-IDX-007", "VAL-IDX-008", "VAL-IDX-009", "VAL-IDX-010",
+    "VAL-IDX-006", "VAL-IDX-007", "VAL-IDX-008", "VAL-IDX-009", "VAL-IDX-010",
     "VAL-RET-001", "VAL-RET-002", "VAL-RET-003", "VAL-RET-004", "VAL-RET-005",
     "VAL-RET-006", "VAL-RET-007", "VAL-RET-008", "VAL-RET-009", "VAL-RET-010",
-    "VAL-RET-012",
+    "VAL-RET-011", "VAL-RET-012",
     "VAL-CLI-001", "VAL-CLI-002", "VAL-CLI-006",
     "VAL-DISC-001", "VAL-DISC-002"
   ],
-  "failedAssertions": [
-    {
-      "id": "VAL-IDX-006",
-      "reason": "126K LOC repo indexed in 96.54s (target: <60s). Embedding API round-trips are the bottleneck. Rate limiting adds ~18-21s; even without rate limits, estimated ~75-78s still exceeds target. Need query/chunk embedding caching, local embedding model, or batch size optimization."
-    },
-    {
-      "id": "VAL-RET-011",
-      "reason": "p95 query latency is 7047ms (target: <500ms). Each hybrid search requires a remote embedding API call (~4s per query). BM25-only is 2.9ms p95. Cold start is 5012ms (target: <2s). Architecture fundamentally depends on remote API for vector search. Fix options: query embedding cache, local embedding model, or accept higher latency with remote API."
-    }
-  ],
+  "failedAssertions": [],
   "blockedAssertions": [],
-  "appliedUpdates": [
-    {
-      "target": "user-testing.md",
-      "description": "Added 'Flow Validator Guidance: Core Engine CLI' section with Vera binary path, API credential setup, pre-indexed repo paths, known issues (reranker API connectivity), isolation rules, and key commands.",
-      "source": "setup"
-    }
-  ],
-  "previousRound": null
+  "appliedUpdates": [],
+  "previousRound": ".factory/validation/core-engine/user-testing/synthesis-round1.json"
 }
