@@ -1,0 +1,45 @@
+{
+  "featureId": "maintainability-and-cleanup",
+  "reviewedAt": "2026-03-20T22:15:00.000Z",
+  "commitId": "fffe0c5",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "All 7 scrutiny fixes are correctly implemented and tested. The maintainability audit document is thorough, covering all 5 required dimensions. Dead code cleanup (spike Cargo.lock removal, .gitignore updates) is complete. The shared search service extraction is clean and eliminates ~200 lines of duplication between CLI and MCP. CLI command handlers properly return Result<> with anyhow::bail!/context instead of process::exit(). The only process::exit(1) remaining is in main(), which is the correct single exit point pattern. 23 files changed with a net reduction of ~5800 lines (mostly from removing spikes/storage/Cargo.lock).",
+    "issues": [
+      {
+        "file": "crates/vera-core/src/embedding/provider.rs",
+        "line": 577,
+        "severity": "non_blocking",
+        "description": "sanitize_error_message is duplicated between provider.rs:577 and reranker.rs:400 with identical logic after the UTF-8 fix. Both were correctly fixed (item 2), but unlike truncate_embeddings (item 5), this duplication was not extracted to a shared utility. The function is small (~15 lines) and module-private, so this is low risk, but it means future changes to sanitization logic must be updated in two places."
+      },
+      {
+        "file": "crates/vera-core/src/retrieval/search_service.rs",
+        "line": 68,
+        "severity": "non_blocking",
+        "description": "execute_search() creates a new tokio::runtime::Runtime on every call. This works correctly but is suboptimal if called repeatedly (e.g., MCP server handling multiple search requests). The MCP server already has its own async context. Consider accepting an optional runtime handle or making execute_search async in a future iteration."
+      },
+      {
+        "file": "crates/vera-core/src/indexing/mod.rs",
+        "line": 22,
+        "severity": "non_blocking",
+        "description": "The shared truncate_embeddings function has no dedicated unit tests. It's covered indirectly by pipeline and update integration tests, but a direct test for edge cases (max_dim=0, empty embeddings, already-shorter vectors) would strengthen coverage. The handoff acknowledges this gap."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "The sanitize_error_message function exists with identical logic in both embedding/provider.rs and retrieval/reranker.rs. While truncate_embeddings duplication was addressed (item 5), this similar duplication pattern was not. AGENTS.md does not have a convention about where shared error-sanitization utilities should live.",
+      "evidence": "crates/vera-core/src/embedding/provider.rs:577 and crates/vera-core/src/retrieval/reranker.rs:400 — identical char_indices()-based truncation + sanitization logic."
+    },
+    {
+      "area": "skills",
+      "observation": "Worker's skillFeedback correctly notes that the implementation-worker skill's Step 2 (Write Failing Tests First) doesn't fit refactoring/cleanup tasks where the goal is behavior-preserving changes. The skill could add guidance for refactoring workflows: 'For refactoring tasks, run existing tests as baseline first, then refactor, then verify all tests still pass.'",
+      "evidence": "Handoff skillFeedback.suggestedChanges: 'The implementation-worker skill's Step 2 (Write Failing Tests First) doesn't fit well for refactoring/cleanup tasks where the goal is to change implementation without changing behavior.'"
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "PASS. All 7 scrutiny fixes (Python class method splitting, UTF-8 safe truncation, API key Debug redaction, LIKE wildcard escaping, truncate_embeddings dedup, shared search service, CLI Result<> refactoring) are correctly implemented with appropriate tests. The maintainability audit document covers all 5 required dimensions. Dead experimental code cleaned up. 3 non-blocking observations: sanitize_error_message still duplicated in 2 files, search_service creates new tokio runtime per call, truncate_embeddings lacks dedicated unit tests. No blocking issues found."
+}

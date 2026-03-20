@@ -145,11 +145,11 @@ Key insights from competitor baseline benchmarking (21 tasks, 4 repos):
 - `SearchResult` always includes all 8 fields: `file_path`, `line_start`, `line_end`, `content`, `language`, `score`, `symbol_name`, `symbol_type`
 - `symbol_name` and `symbol_type` are `null` (not omitted) when no symbol is detected
 
-### CLI/MCP Search Duplication
-- The search logic is implemented in two places: `crates/vera-cli/src/commands/search.rs` and `crates/vera-mcp/src/tools.rs`
-- Both implement BM25 fallback, embedding provider setup, reranker creation, and filter application
-- When modifying search behavior, both locations must be updated to maintain equivalence
-- Future refactoring target: extract shared search service into `vera-core`
+### Shared Search Service
+- Search logic is extracted into `crates/vera-core/src/retrieval/search_service.rs`
+- Both CLI (`crates/vera-cli/src/commands/search.rs`) and MCP (`crates/vera-mcp/src/tools.rs`) call this shared service
+- The service handles BM25 fallback, embedding provider setup, reranker creation, and filter application
+- Note: `execute_search()` creates a new tokio runtime per call — acceptable for CLI, suboptimal for high-throughput MCP use
 
 ## Key Constraints
 

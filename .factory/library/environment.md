@@ -36,6 +36,7 @@ NEVER log, print, or commit API keys.
 - **Transient HTTP 400 "Unable to process"**: Under high concurrency, the Nebius embedding API (Qwen3-Embedding-8B) returns HTTP 400 with body containing "Unable to process". This must be treated as a transient rate-limit error and retried with exponential backoff, not as a permanent client error. The code handles this in `embedding/provider.rs`.
 - **Rate limits at 8+ concurrent requests**: With `max_concurrent_requests=8` and `batch_size=64`, occasional rate limit (429) errors occur. The pipeline uses exponential backoff with jitter (up to 3 retries).
 - **Auth errors (401) should NOT be retried** — they indicate a permanent credential problem.
+- **Daily rate limits:** The Nebius embedding API has daily quotas that are insufficient to index all 4 benchmark repos (ripgrep+flask+fastify+turborepo) in a single day. Turborepo (3765 files) alone exhausts most of the remaining quota after the first 3 repos. For full benchmark suite runs, either spread across multiple days or accept a subset (17/21 tasks excluding turborepo).
 
 ## Machine Specs
 
