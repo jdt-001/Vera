@@ -35,6 +35,13 @@ pub fn classify_node(lang: Language, kind: &str) -> Option<SymbolType> {
         Language::Java => classify_java(kind),
         Language::C => classify_c(kind),
         Language::Cpp => classify_cpp(kind),
+        Language::Ruby => classify_ruby(kind),
+        Language::Bash => classify_bash(kind),
+        Language::Kotlin => classify_kotlin(kind),
+        Language::Swift => classify_swift(kind),
+        Language::Zig => classify_zig(kind),
+        Language::Lua => classify_lua(kind),
+        Language::Scala => classify_scala(kind),
         _ => None,
     }
 }
@@ -123,6 +130,65 @@ fn classify_cpp(kind: &str) -> Option<SymbolType> {
     }
 }
 
+fn classify_ruby(kind: &str) -> Option<SymbolType> {
+    match kind {
+        "method" | "singleton_method" => Some(SymbolType::Function),
+        "class" => Some(SymbolType::Class),
+        "module" => Some(SymbolType::Module),
+        _ => None,
+    }
+}
+
+fn classify_bash(kind: &str) -> Option<SymbolType> {
+    match kind {
+        "function_definition" => Some(SymbolType::Function),
+        _ => None,
+    }
+}
+
+fn classify_kotlin(kind: &str) -> Option<SymbolType> {
+    match kind {
+        "function_declaration" => Some(SymbolType::Function),
+        "class_declaration" => Some(SymbolType::Class), // refined later
+        "object_declaration" => Some(SymbolType::Class), // objects treated as classes/singletons
+        _ => None,
+    }
+}
+
+fn classify_swift(kind: &str) -> Option<SymbolType> {
+    match kind {
+        "function_declaration" => Some(SymbolType::Function),
+        "class_declaration" => Some(SymbolType::Class), // refined later
+        "protocol_declaration" => Some(SymbolType::Interface),
+        _ => None,
+    }
+}
+
+fn classify_zig(kind: &str) -> Option<SymbolType> {
+    match kind {
+        "function_declaration" => Some(SymbolType::Function),
+        // variable_declaration handled in collect_symbols to extract structs
+        _ => None,
+    }
+}
+
+fn classify_lua(kind: &str) -> Option<SymbolType> {
+    match kind {
+        "function_declaration" => Some(SymbolType::Function),
+        _ => None,
+    }
+}
+
+fn classify_scala(kind: &str) -> Option<SymbolType> {
+    match kind {
+        "function_definition" => Some(SymbolType::Function),
+        "class_definition" => Some(SymbolType::Class),
+        "trait_definition" => Some(SymbolType::Trait),
+        "object_definition" => Some(SymbolType::Module), // objects map well to modules in scala
+        _ => None,
+    }
+}
+
 /// Extract the name of a symbol from a tree-sitter node.
 ///
 /// Looks for the first `name` or `identifier`-type child node.
@@ -137,7 +203,13 @@ pub fn extract_name(node: &tree_sitter::Node<'_>, source: &[u8]) -> Option<Strin
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         let kind = child.kind();
-        if kind == "identifier" || kind == "type_identifier" || kind == "property_identifier" {
+        if kind == "identifier"
+            || kind == "type_identifier"
+            || kind == "property_identifier"
+            || kind == "simple_identifier"
+            || kind == "word"
+            || kind == "constant"
+        {
             return Some(child.utf8_text(source).ok()?.to_string());
         }
     }
@@ -152,6 +224,9 @@ fn name_from_node(node: &tree_sitter::Node<'_>, source: &[u8]) -> Option<String>
         || kind == "type_identifier"
         || kind == "property_identifier"
         || kind == "field_identifier"
+        || kind == "simple_identifier"
+        || kind == "word"
+        || kind == "constant"
     {
         return Some(node.utf8_text(source).ok()?.to_string());
     }
@@ -222,7 +297,41 @@ fn collect_symbols(
         return;
     }
 
-    if let Some(sym_type) = classify_node(lang, kind) {
+    // Handle Zig variable_declaration -> struct_declaration
+    if lang == Language::Zig && kind == "variable_declaration" {
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == "struct_declaration" {
+                let name = extract_name(&node, source);
+                symbols.push(RawSymbol {
+                    name,
+                    symbol_type: SymbolType::Struct,
+                    start_byte: node.start_byte(),
+                    end_byte: node.end_byte(),
+                    start_row: node.start_position().row,
+                    end_row: node.end_position().row,
+                });
+                return;
+            }
+        }
+    }
+
+    if let Some(mut sym_type) = classify_node(lang, kind) {
+        // Refine Kotlin and Swift class_declaration
+        if (lang == Language::Kotlin || lang == Language::Swift) && kind == "class_declaration" {
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                let ckind = child.kind();
+                if ckind == "enum" || ckind == "enum_class_body" {
+                    sym_type = SymbolType::Enum;
+                } else if ckind == "interface" {
+                    sym_type = SymbolType::Interface;
+                } else if ckind == "struct" {
+                    sym_type = SymbolType::Struct;
+                }
+            }
+        }
+
         // For Rust impl blocks, extract methods inside but also keep the whole block
         if lang == Language::Rust && kind == "impl_item" {
             extract_impl_methods(node, source, lang, symbols);
@@ -707,5 +816,218 @@ namespace geometry {
 
         let ns = symbols.iter().find(|s| s.symbol_type == SymbolType::Module);
         assert!(ns.is_some(), "should find a namespace");
+    }
+
+    #[test]
+    fn ruby_extracts_functions_and_classes() {
+        let source = r#"
+module MyModule
+end
+
+class MyClass
+end
+
+def my_method
+end
+"#;
+        let symbols = parse_and_extract(source, Language::Ruby);
+        assert!(symbols.len() >= 3);
+        let m = symbols.iter().find(|s| s.symbol_type == SymbolType::Module);
+        assert!(m.is_some());
+        assert_eq!(m.unwrap().name.as_deref(), Some("MyModule"));
+
+        let c = symbols.iter().find(|s| s.symbol_type == SymbolType::Class);
+        assert!(c.is_some());
+        assert_eq!(c.unwrap().name.as_deref(), Some("MyClass"));
+
+        let f = symbols
+            .iter()
+            .find(|s| s.name.as_deref() == Some("my_method"));
+        assert!(f.is_some());
+        assert_eq!(f.unwrap().symbol_type, SymbolType::Function);
+    }
+
+    #[test]
+    fn bash_extracts_functions() {
+        let source = r#"
+function foo() {
+    echo "foo"
+}
+bar() {
+    echo "bar"
+}
+"#;
+        let symbols = parse_and_extract(source, Language::Bash);
+        assert_eq!(symbols.len(), 2);
+        assert_eq!(symbols[0].symbol_type, SymbolType::Function);
+        assert_eq!(symbols[0].name.as_deref(), Some("foo"));
+        assert_eq!(symbols[1].symbol_type, SymbolType::Function);
+        assert_eq!(symbols[1].name.as_deref(), Some("bar"));
+    }
+
+    #[test]
+    fn kotlin_extracts_types_and_functions() {
+        let source = r#"
+fun foo() {}
+class Bar {}
+interface Baz {}
+object Qux {}
+enum class Quux {}
+"#;
+        let symbols = parse_and_extract(source, Language::Kotlin);
+        assert_eq!(symbols.len(), 5);
+
+        let fun = symbols
+            .iter()
+            .find(|s| s.name.as_deref() == Some("foo"))
+            .unwrap();
+        assert_eq!(fun.symbol_type, SymbolType::Function);
+
+        let cls = symbols
+            .iter()
+            .find(|s| s.name.as_deref() == Some("Bar"))
+            .unwrap();
+        assert_eq!(cls.symbol_type, SymbolType::Class);
+
+        let iface = symbols
+            .iter()
+            .find(|s| s.name.as_deref() == Some("Baz"))
+            .unwrap();
+        assert_eq!(iface.symbol_type, SymbolType::Interface);
+
+        let obj = symbols
+            .iter()
+            .find(|s| s.name.as_deref() == Some("Qux"))
+            .unwrap();
+        assert_eq!(obj.symbol_type, SymbolType::Class);
+
+        let enm = symbols
+            .iter()
+            .find(|s| s.name.as_deref() == Some("Quux"))
+            .unwrap();
+        assert_eq!(enm.symbol_type, SymbolType::Enum);
+    }
+
+    #[test]
+    fn swift_extracts_types_and_functions() {
+        let source = r#"
+func foo() {}
+class Bar {}
+struct Baz {}
+enum Qux {}
+protocol Quux {}
+"#;
+        let symbols = parse_and_extract(source, Language::Swift);
+        assert_eq!(symbols.len(), 5);
+
+        let fun = symbols
+            .iter()
+            .find(|s| s.name.as_deref() == Some("foo"))
+            .unwrap();
+        assert_eq!(fun.symbol_type, SymbolType::Function);
+
+        let cls = symbols
+            .iter()
+            .find(|s| s.name.as_deref() == Some("Bar"))
+            .unwrap();
+        assert_eq!(cls.symbol_type, SymbolType::Class);
+
+        let strc = symbols
+            .iter()
+            .find(|s| s.name.as_deref() == Some("Baz"))
+            .unwrap();
+        assert_eq!(strc.symbol_type, SymbolType::Struct);
+
+        let enm = symbols
+            .iter()
+            .find(|s| s.name.as_deref() == Some("Qux"))
+            .unwrap();
+        assert_eq!(enm.symbol_type, SymbolType::Enum);
+
+        let proto = symbols
+            .iter()
+            .find(|s| s.name.as_deref() == Some("Quux"))
+            .unwrap();
+        assert_eq!(proto.symbol_type, SymbolType::Interface);
+    }
+
+    #[test]
+    fn zig_extracts_functions_and_structs() {
+        let source = r#"
+fn foo() void {}
+const Bar = struct {};
+"#;
+        let symbols = parse_and_extract(source, Language::Zig);
+        assert_eq!(symbols.len(), 2);
+
+        let fun = symbols
+            .iter()
+            .find(|s| s.name.as_deref() == Some("foo"))
+            .unwrap();
+        assert_eq!(fun.symbol_type, SymbolType::Function);
+
+        let strc = symbols
+            .iter()
+            .find(|s| s.name.as_deref() == Some("Bar"))
+            .unwrap();
+        assert_eq!(strc.symbol_type, SymbolType::Struct);
+    }
+
+    #[test]
+    fn lua_extracts_functions() {
+        let source = r#"
+function foo() end
+local function bar() end
+"#;
+        let symbols = parse_and_extract(source, Language::Lua);
+        assert_eq!(symbols.len(), 2);
+
+        let foo = symbols
+            .iter()
+            .find(|s| s.name.as_deref() == Some("foo"))
+            .unwrap();
+        assert_eq!(foo.symbol_type, SymbolType::Function);
+
+        let bar = symbols
+            .iter()
+            .find(|s| s.name.as_deref() == Some("bar"))
+            .unwrap();
+        assert_eq!(bar.symbol_type, SymbolType::Function);
+    }
+
+    #[test]
+    fn scala_extracts_types_and_functions() {
+        let source = r#"
+def foo() = {}
+class Bar
+trait Baz
+object Qux
+"#;
+        let symbols = parse_and_extract(source, Language::Scala);
+        assert_eq!(symbols.len(), 4);
+
+        let fun = symbols
+            .iter()
+            .find(|s| s.name.as_deref() == Some("foo"))
+            .unwrap();
+        assert_eq!(fun.symbol_type, SymbolType::Function);
+
+        let cls = symbols
+            .iter()
+            .find(|s| s.name.as_deref() == Some("Bar"))
+            .unwrap();
+        assert_eq!(cls.symbol_type, SymbolType::Class);
+
+        let trt = symbols
+            .iter()
+            .find(|s| s.name.as_deref() == Some("Baz"))
+            .unwrap();
+        assert_eq!(trt.symbol_type, SymbolType::Trait);
+
+        let obj = symbols
+            .iter()
+            .find(|s| s.name.as_deref() == Some("Qux"))
+            .unwrap();
+        assert_eq!(obj.symbol_type, SymbolType::Module);
     }
 }

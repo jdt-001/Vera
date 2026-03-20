@@ -38,6 +38,13 @@ ignore = "0.4"
 rayon = "1.11.0"
 futures = "0.3.32"
 sha2 = "0.10.9"
+tree-sitter-ruby = "0.23.1"
+tree-sitter-bash = "0.23.3"
+tree-sitter-kotlin-sg = "0.4.0"
+tree-sitter-swift = "0.7.1"
+tree-sitter-lua = "0.2.0"
+tree-sitter-scala = "0.23.3"
+tree-sitter-zig = "1.1.2"
 
 [dev-dependencies]
 tempfile = "3"

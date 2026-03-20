@@ -20,15 +20,15 @@ pub fn tree_sitter_grammar(lang: Language) -> Option<TsLanguage> {
         Language::Java => tree_sitter_java::LANGUAGE,
         Language::C => tree_sitter_c::LANGUAGE,
         Language::Cpp => tree_sitter_cpp::LANGUAGE,
+        Language::Ruby => tree_sitter_ruby::LANGUAGE,
+        Language::Bash => tree_sitter_bash::LANGUAGE,
+        Language::Kotlin => tree_sitter_kotlin_sg::LANGUAGE,
+        Language::Swift => tree_sitter_swift::LANGUAGE,
+        Language::Zig => tree_sitter_zig::LANGUAGE,
+        Language::Lua => tree_sitter_lua::LANGUAGE,
+        Language::Scala => tree_sitter_scala::LANGUAGE,
         // Languages without tree-sitter grammar support → Tier 0 fallback
-        Language::Ruby
-        | Language::Swift
-        | Language::Kotlin
-        | Language::Scala
-        | Language::Zig
-        | Language::Lua
-        | Language::Bash
-        | Language::Toml
+        Language::Toml
         | Language::Yaml
         | Language::Json
         | Language::Markdown
@@ -57,6 +57,13 @@ mod tests {
             Language::Java,
             Language::C,
             Language::Cpp,
+            Language::Ruby,
+            Language::Bash,
+            Language::Kotlin,
+            Language::Swift,
+            Language::Zig,
+            Language::Lua,
+            Language::Scala,
         ];
         for lang in tier_1a {
             assert!(
@@ -69,7 +76,6 @@ mod tests {
     #[test]
     fn tier_0_languages_have_no_grammar() {
         let tier_0 = [
-            Language::Ruby,
             Language::Unknown,
             Language::Toml,
             Language::Yaml,
