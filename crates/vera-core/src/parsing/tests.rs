@@ -1,0 +1,556 @@
+//! Integration tests for the parsing pipeline.
+//!
+//! Tests the full `parse_and_chunk` flow across all supported languages,
+//! Tier 0 fallback, large symbol splitting, and edge cases.
+
+use crate::config::IndexingConfig;
+use crate::parsing::parse_and_chunk;
+use crate::types::{Language, SymbolType};
+
+fn default_config() -> IndexingConfig {
+    IndexingConfig::default()
+}
+
+// =========================================================
+// Rust tests
+// =========================================================
+
+#[test]
+fn rust_functions_produce_chunks() {
+    let source = r#"fn hello() {
+    println!("hello");
+}
+
+fn world() -> i32 {
+    42
+}"#;
+    let chunks = parse_and_chunk(source, "main.rs", Language::Rust, &default_config()).unwrap();
+    let funcs: Vec<_> = chunks
+        .iter()
+        .filter(|c| c.symbol_type == Some(SymbolType::Function))
+        .collect();
+    assert_eq!(funcs.len(), 2, "expected 2 function chunks");
+    assert_eq!(funcs[0].symbol_name, Some("hello".to_string()));
+    assert_eq!(funcs[1].symbol_name, Some("world".to_string()));
+}
+
+#[test]
+fn rust_struct_and_impl() {
+    let source = r#"struct Point {
+    x: f64,
+    y: f64,
+}
+
+impl Point {
+    fn new(x: f64, y: f64) -> Self {
+        Self { x, y }
+    }
+}"#;
+    let chunks = parse_and_chunk(source, "point.rs", Language::Rust, &default_config()).unwrap();
+    assert!(chunks.len() >= 2, "expected struct + method(s)");
+
+    let struc = chunks
+        .iter()
+        .find(|c| c.symbol_type == Some(SymbolType::Struct));
+    assert!(struc.is_some(), "should have struct chunk");
+    assert_eq!(struc.unwrap().symbol_name, Some("Point".to_string()));
+
+    let method = chunks
+        .iter()
+        .find(|c| c.symbol_type == Some(SymbolType::Method));
+    assert!(method.is_some(), "should have method chunk");
+    assert_eq!(method.unwrap().symbol_name, Some("new".to_string()));
+}
+
+#[test]
+fn rust_enum_and_trait() {
+    let source = r#"enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+trait Paintable {
+    fn paint(&self, color: Color);
+}"#;
+    let chunks = parse_and_chunk(source, "paint.rs", Language::Rust, &default_config()).unwrap();
+    let enm = chunks
+        .iter()
+        .find(|c| c.symbol_type == Some(SymbolType::Enum));
+    assert!(enm.is_some(), "should have enum chunk");
+    let trt = chunks
+        .iter()
+        .find(|c| c.symbol_type == Some(SymbolType::Trait));
+    assert!(trt.is_some(), "should have trait chunk");
+}
+
+#[test]
+fn rust_type_alias() {
+    let source = "type Result<T> = std::result::Result<T, MyError>;\n";
+    let chunks = parse_and_chunk(source, "lib.rs", Language::Rust, &default_config()).unwrap();
+    let ta = chunks
+        .iter()
+        .find(|c| c.symbol_type == Some(SymbolType::TypeAlias));
+    assert!(ta.is_some(), "should have type alias chunk");
+}
+
+// =========================================================
+// Python tests
+// =========================================================
+
+#[test]
+fn python_function_and_class() {
+    let source = r#"def greet(name):
+    return f"Hello, {name}!"
+
+class UserService:
+    def __init__(self, db):
+        self.db = db
+
+    def get_user(self, user_id):
+        return self.db.get(user_id)
+"#;
+    let chunks =
+        parse_and_chunk(source, "service.py", Language::Python, &default_config()).unwrap();
+    assert!(chunks.len() >= 2, "expected function + class");
+
+    let func = chunks
+        .iter()
+        .find(|c| c.symbol_type == Some(SymbolType::Function));
+    assert!(func.is_some());
+    assert_eq!(func.unwrap().symbol_name, Some("greet".to_string()));
+
+    let cls = chunks
+        .iter()
+        .find(|c| c.symbol_type == Some(SymbolType::Class));
+    assert!(cls.is_some());
+    assert_eq!(cls.unwrap().symbol_name, Some("UserService".to_string()));
+}
+
+#[test]
+fn python_decorated_function() {
+    let source = r#"import functools
+
+@functools.cache
+def expensive_compute(n):
+    return sum(range(n))
+"#;
+    let chunks =
+        parse_and_chunk(source, "compute.py", Language::Python, &default_config()).unwrap();
+    let func = chunks
+        .iter()
+        .find(|c| c.symbol_type == Some(SymbolType::Function));
+    assert!(func.is_some(), "should extract decorated function");
+}
+
+// =========================================================
+// TypeScript tests
+// =========================================================
+
+#[test]
+fn typescript_function_interface_class() {
+    let source = r#"function add(a: number, b: number): number {
+    return a + b;
+}
+
+interface Config {
+    host: string;
+    port: number;
+}
+
+class Server {
+    private config: Config;
+
+    constructor(config: Config) {
+        this.config = config;
+    }
+
+    start(): void {
+        console.log("starting");
+    }
+}
+"#;
+    let chunks =
+        parse_and_chunk(source, "server.ts", Language::TypeScript, &default_config()).unwrap();
+    assert!(chunks.len() >= 3, "expected function + interface + class");
+
+    let func = chunks
+        .iter()
+        .find(|c| c.symbol_name == Some("add".to_string()));
+    assert!(func.is_some());
+    assert_eq!(func.unwrap().symbol_type, Some(SymbolType::Function));
+
+    let iface = chunks
+        .iter()
+        .find(|c| c.symbol_name == Some("Config".to_string()));
+    assert!(iface.is_some());
+    assert_eq!(iface.unwrap().symbol_type, Some(SymbolType::Interface));
+
+    let cls = chunks
+        .iter()
+        .find(|c| c.symbol_name == Some("Server".to_string()));
+    assert!(cls.is_some());
+    assert_eq!(cls.unwrap().symbol_type, Some(SymbolType::Class));
+}
+
+#[test]
+fn typescript_enum_and_type_alias() {
+    let source = r#"enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
+}
+
+type Point = { x: number; y: number };
+"#;
+    let chunks =
+        parse_and_chunk(source, "types.ts", Language::TypeScript, &default_config()).unwrap();
+
+    let enm = chunks
+        .iter()
+        .find(|c| c.symbol_type == Some(SymbolType::Enum));
+    assert!(enm.is_some(), "should have enum chunk");
+
+    let ta = chunks
+        .iter()
+        .find(|c| c.symbol_type == Some(SymbolType::TypeAlias));
+    assert!(ta.is_some(), "should have type alias chunk");
+}
+
+// =========================================================
+// Go tests
+// =========================================================
+
+#[test]
+fn go_function_struct_method() {
+    let source = r#"package main
+
+import "fmt"
+
+func Hello() string {
+    return "hello"
+}
+
+type Point struct {
+    X float64
+    Y float64
+}
+
+func (p *Point) Distance() float64 {
+    return p.X*p.X + p.Y*p.Y
+}
+"#;
+    let chunks = parse_and_chunk(source, "main.go", Language::Go, &default_config()).unwrap();
+    assert!(
+        chunks.len() >= 3,
+        "expected func + struct + method, got {}",
+        chunks.len()
+    );
+
+    let func = chunks
+        .iter()
+        .find(|c| c.symbol_name == Some("Hello".to_string()));
+    assert!(func.is_some());
+    assert_eq!(func.unwrap().symbol_type, Some(SymbolType::Function));
+
+    let struc = chunks
+        .iter()
+        .find(|c| c.symbol_name == Some("Point".to_string()));
+    assert!(struc.is_some());
+    assert_eq!(struc.unwrap().symbol_type, Some(SymbolType::Struct));
+
+    let method = chunks
+        .iter()
+        .find(|c| c.symbol_name == Some("Distance".to_string()));
+    assert!(method.is_some());
+    assert_eq!(method.unwrap().symbol_type, Some(SymbolType::Method));
+}
+
+#[test]
+fn go_interface() {
+    let source = r#"package shapes
+
+type Shape interface {
+    Area() float64
+    Perimeter() float64
+}
+"#;
+    let chunks = parse_and_chunk(source, "shapes.go", Language::Go, &default_config()).unwrap();
+    let iface = chunks
+        .iter()
+        .find(|c| c.symbol_type == Some(SymbolType::Interface));
+    assert!(iface.is_some(), "should have interface chunk");
+    assert_eq!(iface.unwrap().symbol_name, Some("Shape".to_string()));
+}
+
+// =========================================================
+// Java tests
+// =========================================================
+
+#[test]
+fn java_class_with_methods() {
+    let source = r#"class Calculator {
+    public int add(int a, int b) {
+        return a + b;
+    }
+
+    public int multiply(int a, int b) {
+        return a * b;
+    }
+}
+"#;
+    let chunks =
+        parse_and_chunk(source, "Calculator.java", Language::Java, &default_config()).unwrap();
+    assert!(!chunks.is_empty());
+
+    let cls = chunks
+        .iter()
+        .find(|c| c.symbol_type == Some(SymbolType::Class));
+    assert!(cls.is_some(), "should have class chunk");
+}
+
+#[test]
+fn java_interface_and_enum() {
+    let source = r#"interface Drawable {
+    void draw();
+    double area();
+}
+
+enum Color {
+    RED, GREEN, BLUE;
+}
+"#;
+    let chunks =
+        parse_and_chunk(source, "Drawable.java", Language::Java, &default_config()).unwrap();
+
+    let iface = chunks
+        .iter()
+        .find(|c| c.symbol_type == Some(SymbolType::Interface));
+    assert!(iface.is_some(), "should have interface chunk");
+
+    let enm = chunks
+        .iter()
+        .find(|c| c.symbol_type == Some(SymbolType::Enum));
+    assert!(enm.is_some(), "should have enum chunk");
+}
+
+// =========================================================
+// C tests
+// =========================================================
+
+#[test]
+fn c_function_and_struct() {
+    let source = r#"#include <stdio.h>
+
+struct Point {
+    double x;
+    double y;
+};
+
+double distance(struct Point* p) {
+    return p->x * p->x + p->y * p->y;
+}
+
+int main() {
+    struct Point p = {3.0, 4.0};
+    printf("%f\n", distance(&p));
+    return 0;
+}
+"#;
+    let chunks = parse_and_chunk(source, "main.c", Language::C, &default_config()).unwrap();
+    assert!(chunks.len() >= 2, "expected struct + functions");
+
+    let func = chunks
+        .iter()
+        .find(|c| c.symbol_name == Some("distance".to_string()));
+    assert!(func.is_some(), "should find function 'distance'");
+    assert_eq!(func.unwrap().symbol_type, Some(SymbolType::Function));
+}
+
+// =========================================================
+// C++ tests
+// =========================================================
+
+#[test]
+fn cpp_class_and_namespace() {
+    let source = r#"class Shape {
+public:
+    virtual double area() = 0;
+    virtual ~Shape() = default;
+};
+
+namespace geometry {
+    double pi() {
+        return 3.14159;
+    }
+}
+"#;
+    let chunks = parse_and_chunk(source, "shape.cpp", Language::Cpp, &default_config()).unwrap();
+    assert!(
+        chunks.len() >= 1,
+        "expected at least class or namespace chunks"
+    );
+
+    let cls = chunks
+        .iter()
+        .find(|c| c.symbol_type == Some(SymbolType::Class));
+    assert!(cls.is_some(), "should have class chunk");
+
+    let ns = chunks
+        .iter()
+        .find(|c| c.symbol_type == Some(SymbolType::Module));
+    assert!(ns.is_some(), "should have namespace chunk");
+}
+
+// =========================================================
+// Tier 0 fallback tests
+// =========================================================
+
+#[test]
+fn unknown_language_uses_tier0() {
+    let source = "some content\nmore content\nthird line\n";
+    let chunks = parse_and_chunk(source, "data.xyz", Language::Unknown, &default_config()).unwrap();
+    assert!(!chunks.is_empty(), "tier0 should produce chunks");
+    assert_eq!(chunks[0].language, Language::Unknown);
+    assert_eq!(chunks[0].symbol_type, Some(SymbolType::Block));
+}
+
+#[test]
+fn toml_uses_tier0() {
+    let source = "[package]\nname = \"vera\"\nversion = \"0.1.0\"\n";
+    let chunks = parse_and_chunk(source, "Cargo.toml", Language::Toml, &default_config()).unwrap();
+    assert!(!chunks.is_empty());
+    assert_eq!(chunks[0].language, Language::Toml);
+}
+
+// =========================================================
+// Large symbol splitting
+// =========================================================
+
+#[test]
+fn large_function_splits_no_content_gaps() {
+    // Generate a 500+ line function
+    let mut lines = vec!["fn huge_function() {".to_string()];
+    for i in 0..550 {
+        lines.push(format!("    let x{i} = {i};"));
+    }
+    lines.push("}".to_string());
+    let source = lines.join("\n");
+
+    let config = IndexingConfig {
+        max_chunk_lines: 200,
+        ..Default::default()
+    };
+    let chunks = parse_and_chunk(&source, "big.rs", Language::Rust, &config).unwrap();
+
+    // Should be split into multiple sub-chunks
+    assert!(chunks.len() >= 3, "552 lines / 200 = 3 sub-chunks expected");
+
+    // Verify no content gaps: concatenating all chunks = original source
+    let func_chunks: Vec<_> = chunks
+        .iter()
+        .filter(|c| c.symbol_type == Some(SymbolType::Function))
+        .collect();
+    let mut reconstructed = String::new();
+    for (i, chunk) in func_chunks.iter().enumerate() {
+        if i > 0 {
+            reconstructed.push('\n');
+        }
+        reconstructed.push_str(&chunk.content);
+    }
+    assert_eq!(
+        reconstructed, source,
+        "reconstructed content should match original"
+    );
+
+    // Verify line ranges are contiguous
+    for i in 1..func_chunks.len() {
+        assert_eq!(
+            func_chunks[i].line_start,
+            func_chunks[i - 1].line_end + 1,
+            "sub-chunks should be contiguous"
+        );
+    }
+}
+
+// =========================================================
+// Metadata correctness
+// =========================================================
+
+#[test]
+fn chunk_metadata_matches_source() {
+    let source = r#"fn greet(name: &str) -> String {
+    format!("Hello, {}!", name)
+}"#;
+    let chunks = parse_and_chunk(source, "lib.rs", Language::Rust, &default_config()).unwrap();
+    assert_eq!(chunks.len(), 1);
+
+    let chunk = &chunks[0];
+    assert_eq!(chunk.file_path, "lib.rs");
+    assert_eq!(chunk.language, Language::Rust);
+    assert_eq!(chunk.symbol_type, Some(SymbolType::Function));
+    assert_eq!(chunk.symbol_name, Some("greet".to_string()));
+    assert_eq!(chunk.line_start, 1);
+    assert_eq!(chunk.line_end, 3);
+
+    // Verify content matches source at declared lines
+    let source_lines: Vec<&str> = source.lines().collect();
+    let expected = source_lines[0..3].join("\n");
+    assert_eq!(chunk.content, expected);
+}
+
+#[test]
+fn javascript_extracts_like_typescript() {
+    let source = r#"function sum(a, b) {
+    return a + b;
+}
+
+class Calculator {
+    add(a, b) {
+        return a + b;
+    }
+}
+"#;
+    let chunks =
+        parse_and_chunk(source, "calc.js", Language::JavaScript, &default_config()).unwrap();
+    assert!(chunks.len() >= 2, "expected function + class");
+
+    let func = chunks
+        .iter()
+        .find(|c| c.symbol_name == Some("sum".to_string()));
+    assert!(func.is_some());
+
+    let cls = chunks
+        .iter()
+        .find(|c| c.symbol_name == Some("Calculator".to_string()));
+    assert!(cls.is_some());
+}
+
+// =========================================================
+// Edge cases
+// =========================================================
+
+#[test]
+fn empty_source_produces_no_chunks() {
+    let chunks = parse_and_chunk("", "empty.rs", Language::Rust, &default_config()).unwrap();
+    assert!(chunks.is_empty());
+}
+
+#[test]
+fn whitespace_only_source_no_chunks() {
+    let chunks =
+        parse_and_chunk("   \n\n  \n", "ws.rs", Language::Rust, &default_config()).unwrap();
+    assert!(chunks.is_empty());
+}
+
+#[test]
+fn comment_only_file_falls_back() {
+    let source = "// This is a comment\n// Another comment\n";
+    let chunks = parse_and_chunk(source, "comments.rs", Language::Rust, &default_config()).unwrap();
+    // Should produce Tier 0 fallback chunks since no symbols found
+    assert!(
+        !chunks.is_empty(),
+        "comment-only files should still produce chunks"
+    );
+}
