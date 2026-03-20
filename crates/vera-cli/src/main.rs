@@ -43,13 +43,17 @@ enum Commands {
         #[arg(long)]
         lang: Option<String>,
 
-        /// Filter by file path glob pattern.
+        /// Filter by file path glob pattern (e.g., "src/**/*.rs").
         #[arg(long)]
         path: Option<String>,
 
         /// Maximum number of results to return.
         #[arg(long, short = 'n')]
         limit: Option<usize>,
+
+        /// Filter by symbol type (function, method, class, struct, enum, trait, interface, type_alias, constant, variable, module, block).
+        #[arg(long, rename_all = "snake_case")]
+        r#type: Option<String>,
     },
 
     /// Incrementally update the index for changed files.
@@ -84,10 +88,15 @@ fn main() -> anyhow::Result<()> {
             lang,
             path,
             limit,
+            r#type,
         } => {
             tracing::info!(query = %query, "searching");
-            let _ = (lang, path); // Filters implemented in a later feature
-            run_search(&query, limit, cli.json)?;
+            let filters = vera_core::types::SearchFilters {
+                language: lang,
+                path_glob: path,
+                symbol_type: r#type,
+            };
+            run_search(&query, limit, &filters, cli.json)?;
         }
         Commands::Update { path } => {
             tracing::info!(path = %path, "updating");
@@ -177,7 +186,15 @@ fn run_index(path: &str, json_output: bool) -> anyhow::Result<()> {
 /// cross-encoder reranking. Falls back gracefully:
 /// - Embedding API unavailable → BM25-only search with warning
 /// - Reranker API unavailable → unreranked hybrid results with warning
-fn run_search(query: &str, limit: Option<usize>, json_output: bool) -> anyhow::Result<()> {
+///
+/// Filters (--lang, --path, --type) are applied post-retrieval to narrow
+/// down results by language, file path glob, and symbol type.
+fn run_search(
+    query: &str,
+    limit: Option<usize>,
+    filters: &vera_core::types::SearchFilters,
+    json_output: bool,
+) -> anyhow::Result<()> {
     let config = vera_core::config::VeraConfig::default();
     let result_limit = limit.unwrap_or(config.retrieval.default_limit);
 
@@ -206,7 +223,7 @@ fn run_search(query: &str, limit: Option<usize>, json_output: bool) -> anyhow::R
             eprintln!(
                 "Warning: embedding API not configured ({err}), falling back to BM25-only search."
             );
-            return run_bm25_fallback(&index_dir, query, result_limit, json_output);
+            return run_bm25_fallback(&index_dir, query, result_limit, filters, json_output);
         }
     };
     let provider_config = provider_config
@@ -222,7 +239,7 @@ fn run_search(query: &str, limit: Option<usize>, json_output: bool) -> anyhow::R
                 "Warning: failed to initialize embedding provider ({err}), \
                  falling back to BM25-only search."
             );
-            return run_bm25_fallback(&index_dir, query, result_limit, json_output);
+            return run_bm25_fallback(&index_dir, query, result_limit, filters, json_output);
         }
     };
 
@@ -253,6 +270,13 @@ fn run_search(query: &str, limit: Option<usize>, json_output: bool) -> anyhow::R
         None
     };
 
+    // Fetch more candidates when filters are active to ensure enough results survive.
+    let fetch_limit = if filters.is_empty() {
+        result_limit
+    } else {
+        result_limit.saturating_mul(3).max(result_limit + 20)
+    };
+
     // Run hybrid search with optional reranking.
     let stored_dim = config.embedding.max_stored_dim;
     let rrf_k = config.retrieval.rrf_k;
@@ -265,10 +289,10 @@ fn run_search(query: &str, limit: Option<usize>, json_output: bool) -> anyhow::R
             &provider,
             reranker,
             query,
-            result_limit,
+            fetch_limit,
             rrf_k,
             stored_dim,
-            rerank_candidates,
+            rerank_candidates.max(fetch_limit),
         )) {
             Ok(r) => r,
             Err(err) => {
@@ -282,7 +306,7 @@ fn run_search(query: &str, limit: Option<usize>, json_output: bool) -> anyhow::R
             &index_dir,
             &provider,
             query,
-            result_limit,
+            fetch_limit,
             rrf_k,
             stored_dim,
         )) {
@@ -294,6 +318,9 @@ fn run_search(query: &str, limit: Option<usize>, json_output: bool) -> anyhow::R
         }
     };
 
+    // Apply post-retrieval filters.
+    let results = vera_core::retrieval::apply_filters(results, filters, result_limit);
+
     output_results(&results, json_output);
     Ok(())
 }
@@ -303,9 +330,17 @@ fn run_bm25_fallback(
     index_dir: &Path,
     query: &str,
     limit: usize,
+    filters: &vera_core::types::SearchFilters,
     json_output: bool,
 ) -> anyhow::Result<()> {
-    let results = match vera_core::retrieval::search_bm25(index_dir, query, limit) {
+    // Fetch more candidates when filters are active.
+    let fetch_limit = if filters.is_empty() {
+        limit
+    } else {
+        limit.saturating_mul(3).max(limit + 20)
+    };
+
+    let results = match vera_core::retrieval::search_bm25(index_dir, query, fetch_limit) {
         Ok(r) => r,
         Err(err) => {
             eprintln!("Error: BM25 search failed: {err:#}");
@@ -313,6 +348,7 @@ fn run_bm25_fallback(
         }
     };
 
+    let results = vera_core::retrieval::apply_filters(results, filters, limit);
     output_results(&results, json_output);
     Ok(())
 }
@@ -433,6 +469,63 @@ mod tests {
                 assert_eq!(query, "find auth");
                 assert_eq!(lang, Some("rust".to_string()));
                 assert_eq!(limit, Some(5));
+            }
+            _ => panic!("expected Search command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_search_with_type_filter() {
+        let cli = Cli::parse_from(["vera", "search", "find auth", "--type", "function"]);
+        match cli.command {
+            Commands::Search { query, r#type, .. } => {
+                assert_eq!(query, "find auth");
+                assert_eq!(r#type, Some("function".to_string()));
+            }
+            _ => panic!("expected Search command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_search_with_path_filter() {
+        let cli = Cli::parse_from(["vera", "search", "config", "--path", "src/**/*.rs"]);
+        match cli.command {
+            Commands::Search { query, path, .. } => {
+                assert_eq!(query, "config");
+                assert_eq!(path, Some("src/**/*.rs".to_string()));
+            }
+            _ => panic!("expected Search command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_search_with_all_filters() {
+        let cli = Cli::parse_from([
+            "vera",
+            "search",
+            "handle request",
+            "--lang",
+            "typescript",
+            "--path",
+            "src/**/*.ts",
+            "--type",
+            "function",
+            "--limit",
+            "3",
+        ]);
+        match cli.command {
+            Commands::Search {
+                query,
+                lang,
+                path,
+                limit,
+                r#type,
+            } => {
+                assert_eq!(query, "handle request");
+                assert_eq!(lang, Some("typescript".to_string()));
+                assert_eq!(path, Some("src/**/*.ts".to_string()));
+                assert_eq!(r#type, Some("function".to_string()));
+                assert_eq!(limit, Some(3));
             }
             _ => panic!("expected Search command"),
         }

@@ -5,6 +5,7 @@
 //! - Vector similarity search via sqlite-vec
 //! - Reciprocal Rank Fusion (RRF) for merging results
 //! - Cross-encoder reranking via external API
+//! - Post-retrieval filtering by language, path glob, and symbol type
 //! - Graceful degradation when services are unavailable
 
 pub mod bm25;
@@ -18,3 +19,31 @@ pub use reranker::{
     ApiReranker, RerankScore, Reranker, RerankerConfig, RerankerError, rerank_results,
 };
 pub use vector::{VectorSearchError, search_vector, search_vector_with_stores};
+
+use crate::types::{SearchFilters, SearchResult};
+
+#[cfg(test)]
+#[path = "search_quality_tests.rs"]
+mod search_quality_tests;
+
+/// Apply search filters to a list of results, preserving order and limit.
+///
+/// Filters are applied post-retrieval: results that don't match all active
+/// filters are removed. The `limit` parameter caps the final result count.
+pub fn apply_filters(
+    results: Vec<SearchResult>,
+    filters: &SearchFilters,
+    limit: usize,
+) -> Vec<SearchResult> {
+    if filters.is_empty() {
+        let mut results = results;
+        results.truncate(limit);
+        return results;
+    }
+
+    results
+        .into_iter()
+        .filter(|r| filters.matches(r))
+        .take(limit)
+        .collect()
+}
