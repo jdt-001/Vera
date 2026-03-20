@@ -7,5 +7,7 @@
 //! - Incremental update logic (detect changed files, re-index only those)
 
 pub mod pipeline;
+pub mod update;
 
 pub use pipeline::{FileError, IndexSummary, index_dir, index_repository};
+pub use update::{UpdateSummary, content_hash, update_repository};

@@ -84,6 +84,12 @@ impl VectorStore {
     }
 
     /// Insert a single vector for a chunk.
+    ///
+    /// Uses INSERT OR IGNORE + SELECT to get a stable rowid, avoiding the
+    /// AUTOINCREMENT orphan problem where INSERT OR REPLACE allocates a
+    /// new rowid and orphans old vectors in the vec_chunks virtual table.
+    /// For re-inserts (same chunk_id), deletes the old vector first since
+    /// the vec0 virtual table does not support INSERT OR REPLACE.
     pub fn insert(&self, chunk_id: &str, vector: &[f32]) -> Result<()> {
         if vector.len() != self.dim {
             anyhow::bail!(
@@ -93,10 +99,10 @@ impl VectorStore {
             );
         }
 
-        // Insert the chunk_id mapping to get a rowid.
+        // Use INSERT OR IGNORE to preserve existing rowid if already present.
         self.conn
             .execute(
-                "INSERT OR REPLACE INTO chunk_id_map (chunk_id) VALUES (?1)",
+                "INSERT OR IGNORE INTO chunk_id_map (chunk_id) VALUES (?1)",
                 params![chunk_id],
             )
             .context("failed to insert chunk id mapping")?;
@@ -110,10 +116,15 @@ impl VectorStore {
             )
             .context("failed to get rowid for chunk")?;
 
-        // Insert the vector into the virtual table.
+        // Delete any existing vector for this rowid before inserting.
+        // vec0 virtual tables do not support INSERT OR REPLACE.
+        self.conn
+            .execute("DELETE FROM vec_chunks WHERE rowid = ?1", params![rowid])
+            .ok(); // Ignore error if row doesn't exist.
+
         self.conn
             .execute(
-                "INSERT OR REPLACE INTO vec_chunks (rowid, embedding) VALUES (?1, ?2)",
+                "INSERT INTO vec_chunks (rowid, embedding) VALUES (?1, ?2)",
                 params![rowid, vector.as_bytes()],
             )
             .context("failed to insert vector")?;
@@ -122,6 +133,10 @@ impl VectorStore {
     }
 
     /// Insert a batch of vectors.
+    ///
+    /// Uses INSERT OR IGNORE to preserve stable rowids, avoiding the
+    /// AUTOINCREMENT orphan problem. For re-inserts, deletes old vectors
+    /// first since the vec0 virtual table doesn't support upsert.
     pub fn insert_batch(&self, items: &[(&str, &[f32])]) -> Result<()> {
         let tx = self
             .conn
@@ -130,7 +145,7 @@ impl VectorStore {
         {
             let mut id_stmt = self
                 .conn
-                .prepare_cached("INSERT OR REPLACE INTO chunk_id_map (chunk_id) VALUES (?1)")
+                .prepare_cached("INSERT OR IGNORE INTO chunk_id_map (chunk_id) VALUES (?1)")
                 .context("failed to prepare id insert")?;
 
             let mut rowid_stmt = self
@@ -138,11 +153,14 @@ impl VectorStore {
                 .prepare_cached("SELECT rowid FROM chunk_id_map WHERE chunk_id = ?1")
                 .context("failed to prepare rowid query")?;
 
+            let mut del_vec_stmt = self
+                .conn
+                .prepare_cached("DELETE FROM vec_chunks WHERE rowid = ?1")
+                .context("failed to prepare vector delete")?;
+
             let mut vec_stmt = self
                 .conn
-                .prepare_cached(
-                    "INSERT OR REPLACE INTO vec_chunks (rowid, embedding) VALUES (?1, ?2)",
-                )
+                .prepare_cached("INSERT INTO vec_chunks (rowid, embedding) VALUES (?1, ?2)")
                 .context("failed to prepare vector insert")?;
 
             for (chunk_id, vector) in items {
@@ -162,6 +180,9 @@ impl VectorStore {
                 let rowid: i64 = rowid_stmt
                     .query_row(params![chunk_id], |row| row.get(0))
                     .context("failed to get rowid")?;
+
+                // Delete old vector if exists (vec0 doesn't support upsert).
+                del_vec_stmt.execute(params![rowid]).ok();
 
                 vec_stmt
                     .execute(params![rowid, vector.as_bytes()])
@@ -252,6 +273,39 @@ impl VectorStore {
         } else {
             Ok(false)
         }
+    }
+
+    /// Delete all vectors whose chunk_id starts with the given prefix.
+    ///
+    /// This is used for incremental indexing: when a file is re-indexed, all
+    /// old chunks for that file (whose IDs start with "filepath:") are removed.
+    pub fn delete_by_file_prefix(&self, prefix: &str) -> Result<u64> {
+        // Find all rowids matching the prefix.
+        let mut stmt = self
+            .conn
+            .prepare("SELECT rowid, chunk_id FROM chunk_id_map WHERE chunk_id LIKE ?1")
+            .context("failed to prepare prefix delete query")?;
+
+        let like_pattern = format!("{prefix}%");
+        let rows: Vec<(i64, String)> = stmt
+            .query_map(params![like_pattern], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+            })
+            .context("failed to query chunks by prefix")?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .context("failed to collect prefix results")?;
+
+        let count = rows.len() as u64;
+        for (rowid, _chunk_id) in &rows {
+            self.conn
+                .execute("DELETE FROM vec_chunks WHERE rowid = ?1", params![rowid])
+                .context("failed to delete vector by prefix")?;
+            self.conn
+                .execute("DELETE FROM chunk_id_map WHERE rowid = ?1", params![rowid])
+                .context("failed to delete chunk id by prefix")?;
+        }
+
+        Ok(count)
     }
 
     /// Clear all vectors from the store.
@@ -428,5 +482,81 @@ mod tests {
 
         let result = store.search(&[1.0, 2.0], 1);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn insert_same_chunk_preserves_rowid_no_orphans() {
+        // Verify that re-inserting a chunk_id updates the vector in-place
+        // without creating orphaned rows (the AUTOINCREMENT fix).
+        let store = VectorStore::open_in_memory(4).unwrap();
+
+        // Insert initial vector.
+        store.insert("c1", &[1.0, 0.0, 0.0, 0.0]).unwrap();
+        assert_eq!(store.count().unwrap(), 1);
+
+        // Re-insert same chunk_id with a different vector.
+        store.insert("c1", &[0.0, 1.0, 0.0, 0.0]).unwrap();
+        assert_eq!(
+            store.count().unwrap(),
+            1,
+            "count should still be 1 after re-insert"
+        );
+
+        // Search should find the updated vector, not the old one.
+        let results = store.search(&[0.0, 1.0, 0.0, 0.0], 1).unwrap();
+        assert_eq!(results[0].chunk_id, "c1");
+        assert!(results[0].distance < 0.001, "should match updated vector");
+
+        // Old vector should not be a close match.
+        let results_old = store.search(&[1.0, 0.0, 0.0, 0.0], 2).unwrap();
+        // The only result should be c1, and it should have nonzero distance
+        // from the old vector since we updated it.
+        assert_eq!(results_old.len(), 1);
+        assert!(
+            results_old[0].distance > 0.5,
+            "old vector should not match closely"
+        );
+    }
+
+    #[test]
+    fn batch_insert_same_chunk_no_orphans() {
+        let store = VectorStore::open_in_memory(4).unwrap();
+
+        // Insert initial batch.
+        let items: Vec<(&str, &[f32])> =
+            vec![("c1", &[1.0, 0.0, 0.0, 0.0]), ("c2", &[0.0, 1.0, 0.0, 0.0])];
+        store.insert_batch(&items).unwrap();
+        assert_eq!(store.count().unwrap(), 2);
+
+        // Re-insert c1 with updated vector.
+        let items2: Vec<(&str, &[f32])> = vec![("c1", &[0.0, 0.0, 1.0, 0.0])];
+        store.insert_batch(&items2).unwrap();
+        assert_eq!(store.count().unwrap(), 2, "count should still be 2");
+
+        // Verify c1 has the updated vector.
+        let results = store.search(&[0.0, 0.0, 1.0, 0.0], 1).unwrap();
+        assert_eq!(results[0].chunk_id, "c1");
+        assert!(results[0].distance < 0.001);
+    }
+
+    #[test]
+    fn delete_by_file_prefix() {
+        let store = VectorStore::open_in_memory(4).unwrap();
+        let items: Vec<(&str, &[f32])> = vec![
+            ("src/main.rs:0", &[1.0, 0.0, 0.0, 0.0]),
+            ("src/main.rs:1", &[0.0, 1.0, 0.0, 0.0]),
+            ("src/lib.rs:0", &[0.0, 0.0, 1.0, 0.0]),
+        ];
+        store.insert_batch(&items).unwrap();
+        assert_eq!(store.count().unwrap(), 3);
+
+        // Delete all vectors for src/main.rs.
+        let deleted = store.delete_by_file_prefix("src/main.rs:").unwrap();
+        assert_eq!(deleted, 2);
+        assert_eq!(store.count().unwrap(), 1);
+
+        // Remaining vector should be src/lib.rs:0.
+        let results = store.search(&[0.0, 0.0, 1.0, 0.0], 1).unwrap();
+        assert_eq!(results[0].chunk_id, "src/lib.rs:0");
     }
 }

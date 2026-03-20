@@ -100,7 +100,7 @@ fn main() -> anyhow::Result<()> {
         }
         Commands::Update { path } => {
             tracing::info!(path = %path, "updating");
-            eprintln!("vera update: not yet implemented (path: {path})");
+            run_update(&path, cli.json)?;
         }
         Commands::Stats => {
             tracing::info!("showing stats");
@@ -178,6 +178,97 @@ fn run_index(path: &str, json_output: bool) -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+/// Run the `vera update <path>` command.
+///
+/// Incrementally updates the index for changed files. Only files whose
+/// content hash has changed are re-indexed. New files are added, deleted
+/// files are removed from the index.
+fn run_update(path: &str, json_output: bool) -> anyhow::Result<()> {
+    let repo_path = Path::new(path);
+
+    // Validate path early.
+    if !repo_path.exists() {
+        eprintln!("Error: path does not exist: {path}");
+        process::exit(1);
+    }
+    if !repo_path.is_dir() {
+        eprintln!("Error: path is not a directory: {path}");
+        process::exit(1);
+    }
+
+    // Build the tokio runtime for async embedding calls.
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| anyhow::anyhow!("failed to create async runtime: {e}"))?;
+
+    let config = vera_core::config::VeraConfig::default();
+
+    // Create the embedding provider from environment.
+    let provider_config = match vera_core::embedding::EmbeddingProviderConfig::from_env() {
+        Ok(cfg) => cfg,
+        Err(err) => {
+            eprintln!(
+                "Error: embedding API not configured: {err}\n\
+                 Set EMBEDDING_MODEL_BASE_URL, EMBEDDING_MODEL_ID, and \
+                 EMBEDDING_MODEL_API_KEY environment variables."
+            );
+            process::exit(1);
+        }
+    };
+    let provider_config = provider_config
+        .with_timeout(std::time::Duration::from_secs(
+            config.embedding.timeout_secs,
+        ))
+        .with_max_retries(config.embedding.max_retries);
+
+    let provider = match vera_core::embedding::OpenAiProvider::new(provider_config) {
+        Ok(p) => p,
+        Err(err) => {
+            eprintln!("Error: failed to initialize embedding provider: {err}");
+            process::exit(1);
+        }
+    };
+
+    // Run the incremental update pipeline.
+    let summary = match rt.block_on(vera_core::indexing::update_repository(
+        repo_path, &provider, &config,
+    )) {
+        Ok(s) => s,
+        Err(err) => {
+            eprintln!("Error: {err:#}");
+            process::exit(1);
+        }
+    };
+
+    // Output results.
+    if json_output {
+        let json = serde_json::to_string_pretty(&summary)
+            .map_err(|e| anyhow::anyhow!("failed to serialize summary: {e}"))?;
+        println!("{json}");
+    } else {
+        print_update_summary(&summary);
+    }
+
+    Ok(())
+}
+
+/// Print a human-readable summary of the update run.
+fn print_update_summary(summary: &vera_core::indexing::UpdateSummary) {
+    println!("Update complete!");
+    println!();
+    println!("  Files modified:  {}", summary.files_modified);
+    println!("  Files added:     {}", summary.files_added);
+    println!("  Files deleted:   {}", summary.files_deleted);
+    println!("  Files unchanged: {}", summary.files_unchanged);
+    println!("  Total chunks:    {}", summary.total_chunks);
+    println!("  Elapsed time:    {:.2}s", summary.elapsed_secs);
+
+    let total_changed = summary.files_modified + summary.files_added + summary.files_deleted;
+    if total_changed == 0 {
+        println!();
+        println!("  Index is up to date — no changes detected.");
+    }
 }
 
 /// Run the `vera search <query>` command.

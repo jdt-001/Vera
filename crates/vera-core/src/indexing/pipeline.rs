@@ -15,6 +15,7 @@ use tracing::{debug, info, warn};
 use crate::config::VeraConfig;
 use crate::discovery::{self, DiscoveryResult};
 use crate::embedding::{EmbeddingProvider, embed_chunks_concurrent};
+use crate::indexing::update::content_hash;
 use crate::parsing;
 use crate::storage::bm25::{Bm25Document, Bm25Index};
 use crate::storage::metadata::MetadataStore;
@@ -133,7 +134,8 @@ pub async fn index_repository<P: EmbeddingProvider>(
     );
 
     // ── 3. Parse and chunk each file (parallelized with rayon) ──
-    let (all_chunks, parse_errors) = parse_discovered_files_parallel(&discovery, config);
+    let (all_chunks, parse_errors, file_hashes) =
+        parse_discovered_files_parallel(&discovery, config);
 
     info!(
         chunks = all_chunks.len(),
@@ -174,7 +176,8 @@ pub async fn index_repository<P: EmbeddingProvider>(
 
     // ── 5. Store everything on disk ──────────────────────────────
     let idx_dir = index_dir(&repo_root);
-    store_index(&idx_dir, &all_chunks, &embeddings).context("failed to write index artifacts")?;
+    store_index(&idx_dir, &all_chunks, &embeddings, &file_hashes)
+        .context("failed to write index artifacts")?;
 
     info!(index_dir = %idx_dir.display(), "index artifacts written");
 
@@ -198,15 +201,17 @@ pub async fn index_repository<P: EmbeddingProvider>(
 ///
 /// Each file is read and parsed on a rayon thread pool worker. Results
 /// are collected and flattened. Files that fail parsing are recorded as
-/// errors but do not abort the pipeline.
+/// errors but do not abort the pipeline. Also computes content hashes
+/// for incremental indexing support.
 fn parse_discovered_files_parallel(
     discovery: &DiscoveryResult,
     config: &VeraConfig,
-) -> (Vec<Chunk>, Vec<FileError>) {
+) -> (Vec<Chunk>, Vec<FileError>, Vec<(String, String)>) {
     let config = Arc::new(config.clone());
 
-    // Process files in parallel: each returns either Ok(chunks) or Err(error).
-    let results: Vec<Result<Vec<Chunk>, FileError>> = discovery
+    // Process files in parallel: returns Ok((chunks, rel_path, hash)) or Err.
+    #[allow(clippy::type_complexity)]
+    let results: Vec<Result<(Vec<Chunk>, String, String), FileError>> = discovery
         .files
         .par_iter()
         .map(|file| {
@@ -221,6 +226,8 @@ fn parse_discovered_files_parallel(
                     error: err.to_string(),
                 }
             })?;
+
+            let hash = content_hash(&source);
 
             let ext = file
                 .absolute_path
@@ -237,6 +244,7 @@ fn parse_discovered_files_parallel(
                         "parsed file"
                     );
                 })
+                .map(|chunks| (chunks, file.relative_path.clone(), hash))
                 .map_err(|err| {
                     warn!(
                         file = %file.relative_path,
@@ -251,17 +259,21 @@ fn parse_discovered_files_parallel(
         })
         .collect();
 
-    // Flatten results into chunks and errors.
+    // Flatten results into chunks, errors, and file hashes.
     let mut all_chunks = Vec::new();
     let mut parse_errors = Vec::new();
+    let mut file_hashes = Vec::new();
     for result in results {
         match result {
-            Ok(chunks) => all_chunks.extend(chunks),
+            Ok((chunks, rel_path, hash)) => {
+                all_chunks.extend(chunks);
+                file_hashes.push((rel_path, hash));
+            }
             Err(error) => parse_errors.push(error),
         }
     }
 
-    (all_chunks, parse_errors)
+    (all_chunks, parse_errors, file_hashes)
 }
 
 /// Truncate embedding vectors to a maximum dimensionality.
@@ -294,8 +306,13 @@ fn truncate_embeddings(embeddings: &mut [(String, Vec<f32>)], max_dim: usize) ->
     max_dim
 }
 
-/// Write chunks, embeddings, and BM25 index to disk.
-fn store_index(idx_dir: &Path, chunks: &[Chunk], embeddings: &[(String, Vec<f32>)]) -> Result<()> {
+/// Write chunks, embeddings, BM25 index, and file hashes to disk.
+fn store_index(
+    idx_dir: &Path,
+    chunks: &[Chunk],
+    embeddings: &[(String, Vec<f32>)],
+    file_hashes: &[(String, String)],
+) -> Result<()> {
     // Ensure index directory exists.
     std::fs::create_dir_all(idx_dir)
         .with_context(|| format!("failed to create index dir: {}", idx_dir.display()))?;
@@ -314,6 +331,13 @@ fn store_index(idx_dir: &Path, chunks: &[Chunk], embeddings: &[(String, Vec<f32>
     metadata_store
         .insert_chunks(chunks)
         .context("failed to insert chunk metadata")?;
+
+    // Store file content hashes for incremental indexing.
+    for (file_path, hash) in file_hashes {
+        metadata_store
+            .set_file_hash(file_path, hash)
+            .context("failed to store file hash")?;
+    }
 
     debug!(chunks = chunks.len(), "metadata stored");
 

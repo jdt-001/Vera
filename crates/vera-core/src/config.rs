@@ -30,6 +30,7 @@ impl Default for IndexingConfig {
             max_chunk_lines: 200,
             default_excludes: vec![
                 ".git".to_string(),
+                ".vera".to_string(),
                 "node_modules".to_string(),
                 "target".to_string(),
                 "build".to_string(),
