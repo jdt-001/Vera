@@ -1,19 +1,11 @@
 //! `vera stats` — Show index statistics.
 
-use std::process;
-
 /// Run the `vera stats` command.
 pub fn run(json_output: bool) -> anyhow::Result<()> {
     let cwd = std::env::current_dir()
         .map_err(|e| anyhow::anyhow!("failed to get current directory: {e}"))?;
 
-    let stats = match vera_core::stats::collect_stats(&cwd) {
-        Ok(s) => s,
-        Err(err) => {
-            eprintln!("Error: {err:#}");
-            process::exit(1);
-        }
-    };
+    let stats = vera_core::stats::collect_stats(&cwd)?;
 
     if json_output {
         let json = serde_json::to_string_pretty(&stats)

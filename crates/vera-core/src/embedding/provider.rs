@@ -56,7 +56,7 @@ pub trait EmbeddingProvider: Send + Sync {
 // ── Configuration ────────────────────────────────────────────────────
 
 /// Configuration for an OpenAI-compatible embedding provider.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct EmbeddingProviderConfig {
     /// Base URL for the API (e.g. "https://api.openai.com/v1").
     pub base_url: String,
@@ -68,6 +68,18 @@ pub struct EmbeddingProviderConfig {
     pub timeout: Duration,
     /// Maximum retries on transient errors.
     pub max_retries: u32,
+}
+
+impl std::fmt::Debug for EmbeddingProviderConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EmbeddingProviderConfig")
+            .field("base_url", &self.base_url)
+            .field("model_id", &self.model_id)
+            .field("api_key", &"[REDACTED]")
+            .field("timeout", &self.timeout)
+            .field("max_retries", &self.max_retries)
+            .finish()
+    }
 }
 
 impl EmbeddingProviderConfig {
@@ -563,8 +575,18 @@ fn chunk_to_embedding_text(chunk: &Chunk) -> String {
 /// API error bodies sometimes echo back parts of the request. This
 /// ensures we never propagate credential material in error messages.
 fn sanitize_error_message(msg: &str) -> String {
-    // Truncate very long error bodies.
-    let truncated = if msg.len() > 500 { &msg[..500] } else { msg };
+    // Truncate at a safe char boundary to avoid panicking on multi-byte UTF-8.
+    let truncated = if msg.len() > 500 {
+        let end = msg
+            .char_indices()
+            .take_while(|(i, _)| *i < 500)
+            .last()
+            .map(|(i, c)| i + c.len_utf8())
+            .unwrap_or(0);
+        &msg[..end]
+    } else {
+        msg
+    };
     // Strip anything that looks like a bearer token or key.
     let sanitized = truncated
         .replace(|c: char| !c.is_ascii_graphic() && c != ' ', " ")

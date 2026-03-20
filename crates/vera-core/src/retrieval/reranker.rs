@@ -398,7 +398,18 @@ fn format_for_reranker(result: &SearchResult) -> String {
 
 /// Remove any potential API key fragments from error messages.
 fn sanitize_error_message(msg: &str) -> String {
-    let truncated = if msg.len() > 500 { &msg[..500] } else { msg };
+    // Truncate at a safe char boundary to avoid panicking on multi-byte UTF-8.
+    let truncated = if msg.len() > 500 {
+        let end = msg
+            .char_indices()
+            .take_while(|(i, _)| *i < 500)
+            .last()
+            .map(|(i, c)| i + c.len_utf8())
+            .unwrap_or(0);
+        &msg[..end]
+    } else {
+        msg
+    };
     let sanitized = truncated
         .replace(|c: char| !c.is_ascii_graphic() && c != ' ', " ")
         .trim()
@@ -815,6 +826,18 @@ mod tests {
         let long_msg = "a".repeat(1000);
         let sanitized = sanitize_error_message(&long_msg);
         assert!(sanitized.len() <= 500);
+    }
+
+    #[test]
+    fn sanitize_multibyte_utf8_boundary() {
+        // Create a string with multi-byte chars near the 500-byte boundary.
+        // Each '🦀' is 4 bytes. 125 crabs = 500 bytes exactly, but place
+        // the boundary right in the middle of a multi-byte sequence.
+        let msg = "a".repeat(499) + "🦀"; // 499 + 4 = 503 bytes
+        let sanitized = sanitize_error_message(&msg);
+        // Should truncate before the crab emoji, not panic.
+        assert!(sanitized.len() <= 500);
+        assert!(sanitized.is_char_boundary(sanitized.len()));
     }
 
     #[test]

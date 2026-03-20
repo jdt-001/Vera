@@ -275,7 +275,7 @@ fn metadata_sample_06_python_function() {
 // =========================================================
 
 #[test]
-fn metadata_sample_07_python_class() {
+fn metadata_sample_07_python_class_methods_split() {
     let source = r#"class DatabaseConnection:
     def __init__(self, host, port):
         self.host = host
@@ -295,19 +295,42 @@ fn metadata_sample_07_python_class() {
     )
     .unwrap();
 
-    let cls = chunks
+    // Python class methods are now extracted as separate Method chunks.
+    let init = chunks
         .iter()
-        .find(|c| c.symbol_name.as_deref() == Some("DatabaseConnection"))
-        .expect("should find class 'DatabaseConnection'");
-
+        .find(|c| c.symbol_name.as_deref() == Some("__init__"))
+        .expect("should find method '__init__'");
     assert_chunk_metadata(
-        cls,
+        init,
         "db/connection.py",
         Language::Python,
-        Some(SymbolType::Class),
-        Some("DatabaseConnection"),
+        Some(SymbolType::Method),
+        Some("__init__"),
     );
-    assert_content_matches_source(source, cls);
+
+    let connect = chunks
+        .iter()
+        .find(|c| c.symbol_name.as_deref() == Some("connect"))
+        .expect("should find method 'connect'");
+    assert_chunk_metadata(
+        connect,
+        "db/connection.py",
+        Language::Python,
+        Some(SymbolType::Method),
+        Some("connect"),
+    );
+
+    let disconnect = chunks
+        .iter()
+        .find(|c| c.symbol_name.as_deref() == Some("disconnect"))
+        .expect("should find method 'disconnect'");
+    assert_chunk_metadata(
+        disconnect,
+        "db/connection.py",
+        Language::Python,
+        Some(SymbolType::Method),
+        Some("disconnect"),
+    );
 }
 
 // =========================================================

@@ -167,7 +167,7 @@ pub async fn index_repository<P: EmbeddingProvider>(
     .context("embedding generation failed")?;
 
     // Truncate vectors if max_stored_dim is configured.
-    let stored_dim = truncate_embeddings(&mut embeddings, config.embedding.max_stored_dim);
+    let stored_dim = super::truncate_embeddings(&mut embeddings, config.embedding.max_stored_dim);
 
     info!(
         embeddings = embeddings.len(),
@@ -274,36 +274,6 @@ fn parse_discovered_files_parallel(
     }
 
     (all_chunks, parse_errors, file_hashes)
-}
-
-/// Truncate embedding vectors to a maximum dimensionality.
-///
-/// This supports Matryoshka-style dimension reduction: Qwen3 embeddings
-/// retain good retrieval quality at lower dimensions, and truncation
-/// dramatically reduces index storage size.
-///
-/// Returns the actual stored dimensionality.
-fn truncate_embeddings(embeddings: &mut [(String, Vec<f32>)], max_dim: usize) -> usize {
-    if max_dim == 0 || embeddings.is_empty() {
-        return embeddings.first().map(|(_, v)| v.len()).unwrap_or(0);
-    }
-
-    let original_dim = embeddings.first().map(|(_, v)| v.len()).unwrap_or(0);
-    if original_dim <= max_dim {
-        return original_dim;
-    }
-
-    debug!(
-        original_dim,
-        truncated_dim = max_dim,
-        "truncating embedding vectors"
-    );
-
-    for (_, vec) in embeddings.iter_mut() {
-        vec.truncate(max_dim);
-    }
-
-    max_dim
 }
 
 /// Write chunks, embeddings, BM25 index, and file hashes to disk.

@@ -99,7 +99,7 @@ fn rust_type_alias() {
 // =========================================================
 
 #[test]
-fn python_function_and_class() {
+fn python_function_and_class_methods() {
     let source = r#"def greet(name):
     return f"Hello, {name}!"
 
@@ -112,7 +112,8 @@ class UserService:
 "#;
     let chunks =
         parse_and_chunk(source, "service.py", Language::Python, &default_config()).unwrap();
-    assert!(chunks.len() >= 2, "expected function + class");
+    // Now: function + __init__ method + get_user method (+ possible gap chunks)
+    assert!(chunks.len() >= 3, "expected function + 2 class methods");
 
     let func = chunks
         .iter()
@@ -120,11 +121,18 @@ class UserService:
     assert!(func.is_some());
     assert_eq!(func.unwrap().symbol_name, Some("greet".to_string()));
 
-    let cls = chunks
+    // Class methods are now extracted individually.
+    let init = chunks
         .iter()
-        .find(|c| c.symbol_type == Some(SymbolType::Class));
-    assert!(cls.is_some());
-    assert_eq!(cls.unwrap().symbol_name, Some("UserService".to_string()));
+        .find(|c| c.symbol_name == Some("__init__".to_string()));
+    assert!(init.is_some(), "should find method __init__");
+    assert_eq!(init.unwrap().symbol_type, Some(SymbolType::Method));
+
+    let get_user = chunks
+        .iter()
+        .find(|c| c.symbol_name == Some("get_user".to_string()));
+    assert!(get_user.is_some(), "should find method get_user");
+    assert_eq!(get_user.unwrap().symbol_type, Some(SymbolType::Method));
 }
 
 #[test]

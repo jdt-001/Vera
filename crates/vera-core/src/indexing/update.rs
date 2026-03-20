@@ -231,7 +231,8 @@ pub async fn update_repository<P: EmbeddingProvider>(
             .context("embedding generation failed")?;
 
             // Truncate if needed.
-            let stored_dim = truncate_embeddings(&mut embeddings, config.embedding.max_stored_dim);
+            let stored_dim =
+                super::truncate_embeddings(&mut embeddings, config.embedding.max_stored_dim);
 
             // Store metadata.
             metadata_store
@@ -349,24 +350,6 @@ fn remove_file_from_index(
     );
 
     Ok(())
-}
-
-/// Truncate embedding vectors (reused from pipeline module).
-fn truncate_embeddings(embeddings: &mut [(String, Vec<f32>)], max_dim: usize) -> usize {
-    if max_dim == 0 || embeddings.is_empty() {
-        return embeddings.first().map(|(_, v)| v.len()).unwrap_or(0);
-    }
-
-    let original_dim = embeddings.first().map(|(_, v)| v.len()).unwrap_or(0);
-    if original_dim <= max_dim {
-        return original_dim;
-    }
-
-    for (_, vec) in embeddings.iter_mut() {
-        vec.truncate(max_dim);
-    }
-
-    max_dim
 }
 
 #[cfg(test)]

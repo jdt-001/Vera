@@ -149,8 +149,14 @@ fn handle_search_code(args: &Value) -> ToolCallResult {
         );
     }
 
-    // Try hybrid search, fall back to BM25.
-    let results = match try_hybrid_search(&index_dir, query, &config, &filters, result_limit) {
+    // Use the shared search service from vera-core.
+    let results = match vera_core::retrieval::search_service::execute_search(
+        &index_dir,
+        query,
+        &config,
+        &filters,
+        result_limit,
+    ) {
         Ok(r) => r,
         Err(e) => return ToolCallResult::error(format!("Search failed: {e}")),
     };
@@ -159,108 +165,6 @@ fn handle_search_code(args: &Value) -> ToolCallResult {
         Ok(json) => ToolCallResult::success(json),
         Err(e) => ToolCallResult::error(format!("Failed to serialize results: {e}")),
     }
-}
-
-/// Attempt hybrid search, falling back to BM25 if embedding API is unavailable.
-fn try_hybrid_search(
-    index_dir: &Path,
-    query: &str,
-    config: &vera_core::config::VeraConfig,
-    filters: &vera_core::types::SearchFilters,
-    result_limit: usize,
-) -> anyhow::Result<Vec<vera_core::types::SearchResult>> {
-    let fetch_limit = if filters.is_empty() {
-        result_limit
-    } else {
-        result_limit.saturating_mul(3).max(result_limit + 20)
-    };
-
-    // Try to create embedding provider for hybrid search.
-    let provider_config = match vera_core::embedding::EmbeddingProviderConfig::from_env() {
-        Ok(cfg) => cfg,
-        Err(_) => {
-            // Fall back to BM25-only.
-            tracing::warn!("Embedding API not configured, using BM25-only search");
-            let results = vera_core::retrieval::search_bm25(index_dir, query, fetch_limit)?;
-            return Ok(vera_core::retrieval::apply_filters(
-                results,
-                filters,
-                result_limit,
-            ));
-        }
-    };
-
-    let provider_config = provider_config
-        .with_timeout(std::time::Duration::from_secs(
-            config.embedding.timeout_secs,
-        ))
-        .with_max_retries(config.embedding.max_retries);
-
-    let provider = match vera_core::embedding::OpenAiProvider::new(provider_config) {
-        Ok(p) => p,
-        Err(_) => {
-            tracing::warn!("Failed to create embedding provider, using BM25-only search");
-            let results = vera_core::retrieval::search_bm25(index_dir, query, fetch_limit)?;
-            return Ok(vera_core::retrieval::apply_filters(
-                results,
-                filters,
-                result_limit,
-            ));
-        }
-    };
-
-    let provider = vera_core::embedding::CachedEmbeddingProvider::new(provider, 512);
-
-    // Create optional reranker.
-    let reranker = create_reranker(config);
-
-    let stored_dim = config.embedding.max_stored_dim;
-    let rrf_k = config.retrieval.rrf_k;
-    let rerank_candidates = config.retrieval.rerank_candidates;
-
-    let rt = tokio::runtime::Runtime::new()?;
-    let results = if let Some(ref reranker) = reranker {
-        rt.block_on(vera_core::retrieval::search_hybrid_reranked(
-            index_dir,
-            &provider,
-            reranker,
-            query,
-            fetch_limit,
-            rrf_k,
-            stored_dim,
-            rerank_candidates.max(fetch_limit),
-        ))?
-    } else {
-        rt.block_on(vera_core::retrieval::search_hybrid(
-            index_dir,
-            &provider,
-            query,
-            fetch_limit,
-            rrf_k,
-            stored_dim,
-        ))?
-    };
-
-    Ok(vera_core::retrieval::apply_filters(
-        results,
-        filters,
-        result_limit,
-    ))
-}
-
-/// Create the optional reranker from environment.
-fn create_reranker(
-    config: &vera_core::config::VeraConfig,
-) -> Option<vera_core::retrieval::ApiReranker> {
-    if !config.retrieval.reranking_enabled {
-        return None;
-    }
-
-    let reranker_config = vera_core::retrieval::RerankerConfig::from_env().ok()?;
-    let reranker_config = reranker_config
-        .with_timeout(std::time::Duration::from_secs(30))
-        .with_max_retries(2);
-    vera_core::retrieval::ApiReranker::new(reranker_config).ok()
 }
 
 /// Handle the `index_project` tool.

@@ -281,12 +281,21 @@ impl VectorStore {
     /// old chunks for that file (whose IDs start with "filepath:") are removed.
     pub fn delete_by_file_prefix(&self, prefix: &str) -> Result<u64> {
         // Find all rowids matching the prefix.
+        // Escape SQL LIKE wildcards (_ and %) in the prefix to avoid
+        // incorrect matches on file paths containing those characters.
         let mut stmt = self
             .conn
-            .prepare("SELECT rowid, chunk_id FROM chunk_id_map WHERE chunk_id LIKE ?1")
+            .prepare(
+                "SELECT rowid, chunk_id FROM chunk_id_map \
+                 WHERE chunk_id LIKE ?1 ESCAPE '\\'",
+            )
             .context("failed to prepare prefix delete query")?;
 
-        let like_pattern = format!("{prefix}%");
+        let escaped_prefix = prefix
+            .replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_");
+        let like_pattern = format!("{escaped_prefix}%");
         let rows: Vec<(i64, String)> = stmt
             .query_map(params![like_pattern], |row| {
                 Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))

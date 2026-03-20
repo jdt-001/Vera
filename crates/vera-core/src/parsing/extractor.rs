@@ -229,6 +229,13 @@ fn collect_symbols(
             return;
         }
 
+        // For Python classes, extract methods as separate chunks instead of
+        // keeping the entire class body as a single chunk.
+        if lang == Language::Python && kind == "class_definition" {
+            extract_python_class_methods(node, source, symbols);
+            return;
+        }
+
         let name = extract_name(&node, source);
         symbols.push(RawSymbol {
             name,
@@ -323,6 +330,77 @@ fn extract_impl_methods(
     }
 }
 
+/// Extract methods from a Python `class_definition` as separate symbols.
+///
+/// Similar to how Rust `impl` methods are extracted: the class body is
+/// walked for `function_definition` nodes (methods) which become individual
+/// [`Method`] chunks. The class header (up to the first method) and any
+/// inter-method class-level code will be captured as gap chunks by the
+/// chunker. If the class has no methods, the whole class is kept as one chunk.
+fn extract_python_class_methods(
+    class_node: tree_sitter::Node<'_>,
+    source: &[u8],
+    symbols: &mut Vec<RawSymbol>,
+) {
+    let mut found_methods = false;
+
+    // The class body is a `block` child.
+    let mut cursor = class_node.walk();
+    for child in class_node.children(&mut cursor) {
+        if child.kind() == "block" {
+            let mut inner_cursor = child.walk();
+            for item in child.children(&mut inner_cursor) {
+                // Direct function_definition in class body = method.
+                if item.kind() == "function_definition" {
+                    let name = extract_name(&item, source);
+                    symbols.push(RawSymbol {
+                        name,
+                        symbol_type: SymbolType::Method,
+                        start_byte: item.start_byte(),
+                        end_byte: item.end_byte(),
+                        start_row: item.start_position().row,
+                        end_row: item.end_position().row,
+                    });
+                    found_methods = true;
+                }
+                // Decorated methods: decorated_definition > function_definition
+                else if item.kind() == "decorated_definition" {
+                    let mut dec_cursor = item.walk();
+                    for dec_child in item.children(&mut dec_cursor) {
+                        if dec_child.kind() == "function_definition" {
+                            let name = extract_name(&dec_child, source);
+                            symbols.push(RawSymbol {
+                                name,
+                                symbol_type: SymbolType::Method,
+                                // Use the decorated_definition range to include
+                                // the decorator in the chunk.
+                                start_byte: item.start_byte(),
+                                end_byte: item.end_byte(),
+                                start_row: item.start_position().row,
+                                end_row: item.end_position().row,
+                            });
+                            found_methods = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // If class has no methods, keep the entire class as one chunk.
+    if !found_methods {
+        let name = extract_name(&class_node, source);
+        symbols.push(RawSymbol {
+            name,
+            symbol_type: SymbolType::Class,
+            start_byte: class_node.start_byte(),
+            end_byte: class_node.end_byte(),
+            start_row: class_node.start_position().row,
+            end_row: class_node.end_position().row,
+        });
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -412,7 +490,7 @@ trait Drawable {
     }
 
     #[test]
-    fn python_extracts_functions_and_classes() {
+    fn python_extracts_functions_and_class_methods() {
         let source = r#"
 def hello():
     print("hello")
@@ -425,11 +503,47 @@ class MyClass:
         return self.x
 "#;
         let symbols = parse_and_extract(source, Language::Python);
-        assert_eq!(symbols.len(), 2);
+        // Should extract: hello (function), __init__ (method), method (method)
+        assert_eq!(symbols.len(), 3);
         assert_eq!(symbols[0].symbol_type, SymbolType::Function);
         assert_eq!(symbols[0].name.as_deref(), Some("hello"));
-        assert_eq!(symbols[1].symbol_type, SymbolType::Class);
-        assert_eq!(symbols[1].name.as_deref(), Some("MyClass"));
+        assert_eq!(symbols[1].symbol_type, SymbolType::Method);
+        assert_eq!(symbols[1].name.as_deref(), Some("__init__"));
+        assert_eq!(symbols[2].symbol_type, SymbolType::Method);
+        assert_eq!(symbols[2].name.as_deref(), Some("method"));
+    }
+
+    #[test]
+    fn python_class_without_methods_kept_as_class() {
+        let source = r#"
+class Config:
+    DEBUG = True
+    VERSION = "1.0"
+"#;
+        let symbols = parse_and_extract(source, Language::Python);
+        assert_eq!(symbols.len(), 1);
+        assert_eq!(symbols[0].symbol_type, SymbolType::Class);
+        assert_eq!(symbols[0].name.as_deref(), Some("Config"));
+    }
+
+    #[test]
+    fn python_decorated_methods_extracted_separately() {
+        let source = r#"
+class MyClass:
+    @staticmethod
+    def static_method():
+        pass
+
+    @property
+    def value(self):
+        return self._value
+"#;
+        let symbols = parse_and_extract(source, Language::Python);
+        assert_eq!(symbols.len(), 2);
+        assert_eq!(symbols[0].symbol_type, SymbolType::Method);
+        assert_eq!(symbols[0].name.as_deref(), Some("static_method"));
+        assert_eq!(symbols[1].symbol_type, SymbolType::Method);
+        assert_eq!(symbols[1].name.as_deref(), Some("value"));
     }
 
     #[test]

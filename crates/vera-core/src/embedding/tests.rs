@@ -390,6 +390,31 @@ fn provider_config_with_timeout() {
     assert_eq!(config.max_retries, 5);
 }
 
+#[test]
+fn provider_config_debug_redacts_api_key() {
+    use crate::embedding::EmbeddingProviderConfig;
+
+    let config = EmbeddingProviderConfig::new(
+        "https://api.example.com/v1".to_string(),
+        "model-123".to_string(),
+        "super-secret-key-12345".to_string(),
+    );
+
+    let debug_output = format!("{config:?}");
+    assert!(
+        debug_output.contains("[REDACTED]"),
+        "Debug should show [REDACTED] for api_key"
+    );
+    assert!(
+        !debug_output.contains("super-secret-key-12345"),
+        "Debug must NOT contain the actual API key"
+    );
+    assert!(
+        debug_output.contains("model-123"),
+        "Debug should still show the model_id"
+    );
+}
+
 // ── OpenAI provider HTTP tests (with mock server) ───────────────────
 
 #[tokio::test]

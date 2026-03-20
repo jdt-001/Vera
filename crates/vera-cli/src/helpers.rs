@@ -1,35 +1,25 @@
 //! Shared helper functions for CLI command implementations.
 
-use std::process;
-
 /// Create an embedding provider from environment variables.
 pub fn create_embedding_provider(
     config: &vera_core::config::VeraConfig,
 ) -> anyhow::Result<vera_core::embedding::OpenAiProvider> {
-    let provider_config = match vera_core::embedding::EmbeddingProviderConfig::from_env() {
-        Ok(cfg) => cfg,
-        Err(err) => {
-            eprintln!(
-                "Error: embedding API not configured: {err}\n\
+    let provider_config =
+        vera_core::embedding::EmbeddingProviderConfig::from_env().map_err(|err| {
+            anyhow::anyhow!(
+                "embedding API not configured: {err}\n\
                  Hint: set EMBEDDING_MODEL_BASE_URL, EMBEDDING_MODEL_ID, and \
                  EMBEDDING_MODEL_API_KEY environment variables."
-            );
-            process::exit(1);
-        }
-    };
+            )
+        })?;
     let provider_config = provider_config
         .with_timeout(std::time::Duration::from_secs(
             config.embedding.timeout_secs,
         ))
         .with_max_retries(config.embedding.max_retries);
 
-    match vera_core::embedding::OpenAiProvider::new(provider_config) {
-        Ok(p) => Ok(p),
-        Err(err) => {
-            eprintln!("Error: failed to initialize embedding provider: {err}");
-            process::exit(1);
-        }
-    }
+    vera_core::embedding::OpenAiProvider::new(provider_config)
+        .map_err(|err| anyhow::anyhow!("failed to initialize embedding provider: {err}"))
 }
 
 /// Output search results in human-readable or JSON format.

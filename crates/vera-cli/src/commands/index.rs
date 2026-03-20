@@ -1,7 +1,8 @@
 //! `vera index <path>` — Index a codebase for search.
 
 use std::path::Path;
-use std::process;
+
+use anyhow::{Context, bail};
 
 use crate::helpers::{create_embedding_provider, print_human_summary};
 
@@ -11,18 +12,16 @@ pub fn run(path: &str, json_output: bool) -> anyhow::Result<()> {
 
     // Validate path early — before requiring API credentials.
     if !repo_path.exists() {
-        eprintln!(
-            "Error: path does not exist: {path}\n\
+        bail!(
+            "path does not exist: {path}\n\
              Hint: check the path and try again."
         );
-        process::exit(1);
     }
     if !repo_path.is_dir() {
-        eprintln!(
-            "Error: path is not a directory: {path}\n\
+        bail!(
+            "path is not a directory: {path}\n\
              Hint: vera index expects a directory path, not a file."
         );
-        process::exit(1);
     }
 
     // Build the tokio runtime for async embedding calls.
@@ -35,15 +34,11 @@ pub fn run(path: &str, json_output: bool) -> anyhow::Result<()> {
     let provider = create_embedding_provider(&config)?;
 
     // Run the indexing pipeline.
-    let summary = match rt.block_on(vera_core::indexing::index_repository(
-        repo_path, &provider, &config,
-    )) {
-        Ok(s) => s,
-        Err(err) => {
-            eprintln!("Error: indexing failed: {err:#}");
-            process::exit(1);
-        }
-    };
+    let summary = rt
+        .block_on(vera_core::indexing::index_repository(
+            repo_path, &provider, &config,
+        ))
+        .context("indexing failed")?;
 
     // Output results.
     if json_output {

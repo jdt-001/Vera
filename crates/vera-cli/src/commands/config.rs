@@ -1,6 +1,6 @@
 //! `vera config` — Show or set configuration values.
 
-use std::process;
+use anyhow::bail;
 
 /// Run the `vera config` command.
 pub fn run(args: &[String], json_output: bool) -> anyhow::Result<()> {
@@ -18,14 +18,14 @@ pub fn run(args: &[String], json_output: bool) -> anyhow::Result<()> {
             }
         }
         Some("get") => {
-            let key = args.get(1).unwrap_or_else(|| {
-                eprintln!(
-                    "Error: missing key for `vera config get`.\n\
+            let key = match args.get(1) {
+                Some(k) => k,
+                None => bail!(
+                    "missing key for `vera config get`.\n\
                      Hint: use `vera config get <key>`, \
                      e.g., `vera config get retrieval.default_limit`"
-                );
-                process::exit(1);
-            });
+                ),
+            };
             let value = get_config_value(&config, key);
             match value {
                 Some(v) => {
@@ -35,13 +35,10 @@ pub fn run(args: &[String], json_output: bool) -> anyhow::Result<()> {
                         println!("{key} = {v}");
                     }
                 }
-                None => {
-                    eprintln!(
-                        "Error: unknown configuration key: {key}\n\
-                         Hint: run `vera config show` to see all available keys."
-                    );
-                    process::exit(1);
-                }
+                None => bail!(
+                    "unknown configuration key: {key}\n\
+                     Hint: run `vera config show` to see all available keys."
+                ),
             }
         }
         Some("set") => {
@@ -51,11 +48,10 @@ pub fn run(args: &[String], json_output: bool) -> anyhow::Result<()> {
                 (Some(key), Some(value)) => {
                     // Validate the key exists.
                     if get_config_value(&config, key).is_none() {
-                        eprintln!(
-                            "Error: unknown configuration key: {key}\n\
+                        bail!(
+                            "unknown configuration key: {key}\n\
                              Hint: run `vera config show` to see all available keys."
                         );
-                        process::exit(1);
                     }
                     // Note: Vera currently uses default config. Persistent config
                     // file support is planned. For now, show the intended change.
@@ -75,24 +71,18 @@ pub fn run(args: &[String], json_output: bool) -> anyhow::Result<()> {
                         println!("Intended change: {key} = {value}");
                     }
                 }
-                _ => {
-                    eprintln!(
-                        "Error: missing key or value for `vera config set`.\n\
-                         Hint: use `vera config set <key> <value>`, \
-                         e.g., `vera config set retrieval.default_limit 20`"
-                    );
-                    process::exit(1);
-                }
+                _ => bail!(
+                    "missing key or value for `vera config set`.\n\
+                     Hint: use `vera config set <key> <value>`, \
+                     e.g., `vera config set retrieval.default_limit 20`"
+                ),
             }
         }
-        Some(unknown) => {
-            eprintln!(
-                "Error: unknown config subcommand: {unknown}\n\
-                 Hint: valid subcommands are: show, get, set.\n\
-                 Run `vera config --help` for details."
-            );
-            process::exit(1);
-        }
+        Some(unknown) => bail!(
+            "unknown config subcommand: {unknown}\n\
+             Hint: valid subcommands are: show, get, set.\n\
+             Run `vera config --help` for details."
+        ),
     }
 
     Ok(())

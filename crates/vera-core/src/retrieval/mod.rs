@@ -11,6 +11,7 @@
 pub mod bm25;
 pub mod hybrid;
 pub mod reranker;
+pub mod search_service;
 pub mod vector;
 
 pub use bm25::{search_bm25, search_bm25_with_stores};

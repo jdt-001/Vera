@@ -2,3 +2,5 @@ secrets.env
 .bench/
 target/
 .vera/
+spikes/*/Cargo.lock
+spikes/*/node_modules/
