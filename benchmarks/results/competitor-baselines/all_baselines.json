@@ -1,0 +1,396 @@
+{
+  "cocoindex": {
+    "tool_name": "cocoindex-code",
+    "timestamp": "2026-03-20T12:22:25.625125+00:00",
+    "version_info": {
+      "tool_version": "cocoindex-code 0.2.4",
+      "corpus_version": 1,
+      "repo_shas": {
+        "ripgrep": "4519153e5e461527f4bca45b042fff45c4ec6fb9",
+        "flask": "4cae5d8e411b1e69949d8fae669afeacbd3e5908",
+        "fastify": "a22217f9420f70017a419d8e18b2a3141ab27989",
+        "turborepo": "56b79ff5c1c9366593e9e68a922d997e2698c5f4"
+      },
+      "config": {}
+    },
+    "per_task": [
+      {
+        "task_id": "config-001",
+        "category": "config",
+        "retrieval_metrics": {
+          "recall_at_1": 0.0,
+          "recall_at_5": 0.0,
+          "recall_at_10": 0.0,
+          "mrr": 0.0,
+          "ndcg": 0.0
+        },
+        "latency_ms": 453.51505279541016,
+        "result_count": 20
+      },
+      {
+        "task_id": "config-002",
+        "category": "config",
+        "retrieval_metrics": {
+          "recall_at_1": 0.0,
+          "recall_at_5": 0.0,
+          "recall_at_10": 0.0,
+          "mrr": 0.0,
+          "ndcg": 0.0
+        },
+        "latency_ms": 440.2048587799072,
+        "result_count": 20
+      },
+      {
+        "task_id": "config-003",
+        "category": "config",
+        "retrieval_metrics": {
+          "recall_at_1": 0.0,
+          "recall_at_5": 0.0,
+          "recall_at_10": 0.0,
+          "mrr": 0.0,
+          "ndcg": 0.0
+        },
+        "latency_ms": 485.1803779602051,
+        "result_count": 20
+      },
+      {
+        "task_id": "config-004",
+        "category": "config",
+        "retrieval_metrics": {
+          "recall_at_1": 0.0,
+          "recall_at_5": 0.0,
+          "recall_at_10": 0.0,
+          "mrr": 0.0,
+          "ndcg": 0.0
+        },
+        "latency_ms": 432.48748779296875,
+        "result_count": 20
+      },
+      {
+        "task_id": "cross-file-001",
+        "category": "cross_file",
+        "retrieval_metrics": {
+          "recall_at_1": 0.3333333333333333,
+          "recall_at_5": 0.3333333333333333,
+          "recall_at_10": 0.3333333333333333,
+          "mrr": 1.0,
+          "ndcg": 0.6387878864795979
+        },
+        "latency_ms": 439.50486183166504,
+        "result_count": 20
+      },
+      {
+        "task_id": "cross-file-002",
+        "category": "cross_file",
+        "retrieval_metrics": {
+          "recall_at_1": 0.0,
+          "recall_at_5": 0.5,
+          "recall_at_10": 0.5,
+          "mrr": 0.5,
+          "ndcg": 0.38685280723454163
+        },
+        "latency_ms": 445.8489418029785,
+        "result_count": 20
+      },
+      {
+        "task_id": "cross-file-003",
+        "category": "cross_file",
+        "retrieval_metrics": {
+          "recall_at_1": 0.0,
+          "recall_at_5": 0.0,
+          "recall_at_10": 0.5,
+          "mrr": 0.16666666666666666,
+          "ndcg": 0.27078426295835145
+        },
+        "latency_ms": 442.16203689575195,
+        "result_count": 20
+      },
+      {
+        "task_id": "disambig-001",
+        "category": "disambiguation",
+        "retrieval_metrics": {
+          "recall_at_1": 0.0,
+          "recall_at_5": 0.0,
+          "recall_at_10": 0.25,
+          "mrr": 0.1111111111111111,
+          "ndcg": 0.08452085079694197
+        },
+        "latency_ms": 448.7624168395996,
+        "result_count": 20
+      },
+      {
+        "task_id": "disambig-002",
+        "category": "disambiguation",
+        "retrieval_metrics": {
+          "recall_at_1": 0.0,
+          "recall_at_5": 0.5,
+          "recall_at_10": 0.5,
+          "mrr": 0.3333333333333333,
+          "ndcg": 0.19004688335796713
+        },
+        "latency_ms": 446.02417945861816,
+        "result_count": 20
+      },
+      {
+        "task_id": "disambig-003",
+        "category": "disambiguation",
+        "retrieval_metrics": {
+          "recall_at_1": 0.0,
+          "recall_at_5": 0.0,
+          "recall_at_10": 0.0,
+          "mrr": 0.08333333333333333,
+          "ndcg": 0.0
+        },
+        "latency_ms": 458.35161209106445,
+        "result_count": 20
+      },
+      {
+        "task_id": "intent-001",
+        "category": "intent",
+        "retrieval_metrics": {
+          "recall_at_1": 0.0,
+          "recall_at_5": 0.5,
+          "recall_at_10": 0.5,
+          "mrr": 0.5,
+          "ndcg": 0.5912352048230277
+        },
+        "latency_ms": 445.0356960296631,
+        "result_count": 20
+      },
+      {
+        "task_id": "intent-002",
+        "category": "intent",
+        "retrieval_metrics": {
+          "recall_at_1": 1.0,
+          "recall_at_5": 1.0,
+          "recall_at_10": 1.0,
+          "mrr": 1.0,
+          "ndcg": 2.48713694067948
+        },
+        "latency_ms": 439.84317779541016,
+        "result_count": 20
+      },
+      {
+        "task_id": "intent-003",
+        "category": "intent",
+        "retrieval_metrics": {
+          "recall_at_1": 0.0,
+          "recall_at_5": 0.0,
+          "recall_at_10": 1.0,
+          "mrr": 0.16666666666666666,
+          "ndcg": 0.3562071871080222
+        },
+        "latency_ms": 431.75244331359863,
+        "result_count": 20
+      },
+      {
+        "task_id": "intent-004",
+        "category": "intent",
+        "retrieval_metrics": {
+          "recall_at_1": 0.0,
+          "recall_at_5": 1.0,
+          "recall_at_10": 1.0,
+          "mrr": 0.5,
+          "ndcg": 0.9199945798893454
+        },
+        "latency_ms": 452.35729217529297,
+        "result_count": 20
+      },
+      {
+        "task_id": "intent-005",
+        "category": "intent",
+        "retrieval_metrics": {
+          "recall_at_1": 1.0,
+          "recall_at_5": 1.0,
+          "recall_at_10": 1.0,
+          "mrr": 1.0,
+          "ndcg": 2.5616063116448506
+        },
+        "latency_ms": 432.80029296875,
+        "result_count": 20
+      },
+      {
+        "task_id": "symbol-lookup-001",
+        "category": "symbol_lookup",
+        "retrieval_metrics": {
+          "recall_at_1": 0.0,
+          "recall_at_5": 0.0,
+          "recall_at_10": 0.0,
+          "mrr": 0.0,
+          "ndcg": 0.0
+        },
+        "latency_ms": 454.9844264984131,
+        "result_count": 20
+      },
+      {
+        "task_id": "symbol-lookup-002",
+        "category": "symbol_lookup",
+        "retrieval_metrics": {
+          "recall_at_1": 1.0,
+          "recall_at_5": 1.0,
+          "recall_at_10": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0
+        },
+        "latency_ms": 448.83155822753906,
+        "result_count": 20
+      },
+      {
+        "task_id": "symbol-lookup-003",
+        "category": "symbol_lookup",
+        "retrieval_metrics": {
+          "recall_at_1": 0.0,
+          "recall_at_5": 0.0,
+          "recall_at_10": 0.0,
+          "mrr": 0.06666666666666667,
+          "ndcg": 0.0
+        },
+        "latency_ms": 447.1874237060547,
+        "result_count": 20
+      },
+      {
+        "task_id": "symbol-lookup-004",
+        "category": "symbol_lookup",
+        "retrieval_metrics": {
+          "recall_at_1": 0.0,
+          "recall_at_5": 0.0,
+          "recall_at_10": 1.0,
+          "mrr": 0.125,
+          "ndcg": 0.31546487678572877
+        },
+        "latency_ms": 439.64600563049316,
+        "result_count": 20
+      },
+      {
+        "task_id": "symbol-lookup-005",
+        "category": "symbol_lookup",
+        "retrieval_metrics": {
+          "recall_at_1": 0.0,
+          "recall_at_5": 1.0,
+          "recall_at_10": 1.0,
+          "mrr": 0.5,
+          "ndcg": 0.6309297535714575
+        },
+        "latency_ms": 438.7023448944092,
+        "result_count": 20
+      },
+      {
+        "task_id": "symbol-lookup-006",
+        "category": "symbol_lookup",
+        "retrieval_metrics": {
+          "recall_at_1": 0.0,
+          "recall_at_5": 1.0,
+          "recall_at_10": 1.0,
+          "mrr": 0.3333333333333333,
+          "ndcg": 0.5
+        },
+        "latency_ms": 449.3832588195801,
+        "result_count": 20
+      }
+    ],
+    "per_category": {
+      "config": {
+        "retrieval": {
+          "recall_at_1": 0.0,
+          "recall_at_5": 0.0,
+          "recall_at_10": 0.0,
+          "mrr": 0.0,
+          "ndcg": 0.0
+        },
+        "performance": {
+          "latency_p50_ms": 446.8599557876587,
+          "latency_p95_ms": 480.43057918548584,
+          "index_time_secs": 5.21140456199646,
+          "storage_size_bytes": 149518560,
+          "total_token_count": 0
+        },
+        "task_count": 4
+      },
+      "cross_file": {
+        "retrieval": {
+          "recall_at_1": 0.1111111111111111,
+          "recall_at_5": 0.27777777777777773,
+          "recall_at_10": 0.4444444444444444,
+          "mrr": 0.5555555555555556,
+          "ndcg": 0.4321416522241637
+        },
+        "performance": {
+          "latency_p50_ms": 442.16203689575195,
+          "latency_p95_ms": 445.48025131225586,
+          "index_time_secs": 5.21140456199646,
+          "storage_size_bytes": 149518560,
+          "total_token_count": 0
+        },
+        "task_count": 3
+      },
+      "disambiguation": {
+        "retrieval": {
+          "recall_at_1": 0.0,
+          "recall_at_5": 0.16666666666666666,
+          "recall_at_10": 0.25,
+          "mrr": 0.17592592592592593,
+          "ndcg": 0.09152257805163637
+        },
+        "performance": {
+          "latency_p50_ms": 448.7624168395996,
+          "latency_p95_ms": 457.39269256591797,
+          "index_time_secs": 5.21140456199646,
+          "storage_size_bytes": 149518560,
+          "total_token_count": 0
+        },
+        "task_count": 3
+      },
+      "intent": {
+        "retrieval": {
+          "recall_at_1": 0.4,
+          "recall_at_5": 0.7,
+          "recall_at_10": 0.9,
+          "mrr": 0.6333333333333333,
+          "ndcg": 1.3832360448289451
+        },
+        "performance": {
+          "latency_p50_ms": 439.84317779541016,
+          "latency_p95_ms": 450.892972946167,
+          "index_time_secs": 5.21140456199646,
+          "storage_size_bytes": 149518560,
+          "total_token_count": 0
+        },
+        "task_count": 5
+      },
+      "symbol_lookup": {
+        "retrieval": {
+          "recall_at_1": 0.16666666666666666,
+          "recall_at_5": 0.5,
+          "recall_at_10": 0.6666666666666666,
+          "mrr": 0.33749999999999997,
+          "ndcg": 0.4077324383928644
+        },
+        "performance": {
+          "latency_p50_ms": 448.0094909667969,
+          "latency_p95_ms": 453.58413457870483,
+          "index_time_secs": 5.21140456199646,
+          "storage_size_bytes": 149518560,
+          "total_token_count": 0
+        },
+        "task_count": 6
+      }
+    },
+    "aggregate": {
+      "retrieval": {
+        "recall_at_1": 0.15873015873015875,
+        "recall_at_5": 0.373015873015873,
+        "recall_at_10": 0.503968253968254,
+        "mrr": 0.3517195767195767,
+        "ndcg": 0.5206460735871101
+      },
+      "performance": {
+        "latency_p50_ms": 445.8489418029785,
+        "latency_p95_ms": 458.35161209106445,
+        "index_time_secs": 5.21140456199646,
+        "storage_size_bytes": 149518560,
+        "total_token_count": 1560
+      },
+      "task_count": 21
+    }
+  }
+}
