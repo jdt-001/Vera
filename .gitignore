@@ -4,3 +4,13 @@ target/
 .vera/
 spikes/*/Cargo.lock
 spikes/*/node_modules/
+
+# Factory / AI development files
+.factory/
+.agents/
+.dev/
+vera_*.md
+vera_*.txt
+skills-lock.json
+competitive-landscape-report.md
+vera-planning.md

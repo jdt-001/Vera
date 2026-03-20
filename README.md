@@ -23,7 +23,7 @@ Vera (Vector Enhanced Relevance Agent) is a code indexing and retrieval CLI tool
 
 ```bash
 # Clone and build from source
-git clone https://github.com/your-org/vera.git
+git clone https://github.com/vera-search/vera.git
 cd vera
 cargo build --release
 
