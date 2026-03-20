@@ -21,6 +21,16 @@ Stored in `secrets.env` at repo root (NEVER committed, in .gitignore).
 Workers must `source secrets.env` before running tests that need embedding/reranking.
 NEVER log, print, or commit API keys.
 
+### Alternative API Providers
+
+- **SiliconFlow** (`api.siliconflow.com/v1`): Used for Qwen3-Embedding-0.6B (lightweight fallback model). Authenticated with the `RERANKER_MODEL_API_KEY` env var (key reuse — same provider). Discovered during embedding-and-chunking-spike.
+
+## Spike Development Notes
+
+- Spike Cargo.toml files in subdirectories (e.g., `spikes/storage/Cargo.toml`) need an empty `[workspace]` table to avoid being pulled into the root workspace. Without this, `cargo build` fails with "current package believes it's in a workspace".
+- Spike `Cargo.lock` files should be gitignored (add to spike `.gitignore`). The root `Cargo.lock` IS committed (correct for the main binary project).
+- Spike build artifacts (`target/`, `node_modules/`) should be excluded via a local `.gitignore` in the spike directory.
+
 ## Machine Specs
 
 - AMD Ryzen 5 7600X3D (12 threads)

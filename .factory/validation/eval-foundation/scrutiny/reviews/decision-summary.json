@@ -1,0 +1,44 @@
+{
+  "featureId": "decision-summary",
+  "reviewedAt": "2026-03-20T14:30:00.000Z",
+  "commitId": "ad9651b",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The decision summary document (docs/adr/000-decision-summary.md, 222 lines) is comprehensive and well-structured. It consolidates all 5 major M1 architecture decisions with concrete comparison tables and ADR references, defines exactly 2 open questions with clear resolution plans, and categorizes 22 prior assumptions from vera-planning.md as validated (13), invalidated (2), or hypothetical (7) with evidence references. Data points in the summary are consistent with the individual ADRs (001-004) and the library/architecture.md. The M2 implementation direction section provides an actionable technology stack table and build order. The worker also updated .factory/library/architecture.md with an ADR-000 reference in a second commit (1efc261). No bugs or content inaccuracies found.",
+    "issues": [
+      {
+        "file": "docs/adr/000-decision-summary.md",
+        "line": 1,
+        "severity": "non_blocking",
+        "description": "ADR-000 does not follow the standard 7-section ADR format (Question, Options, Evaluation Method, Evidence, Decision, Consequences, Follow-up) specified in AGENTS.md. This is reasonable since it's a summary document, not a decision record, but AGENTS.md doesn't document this exception. A brief note in the document header (e.g., 'This is a consolidation summary, not a standard ADR') could prevent future confusion."
+      },
+      {
+        "file": "docs/adr/000-decision-summary.md",
+        "line": 43,
+        "severity": "non_blocking",
+        "description": "Storage backend comparison table shows 768-dim vectors in ADR-002 but ADR-003 decided on Qwen3-8B with 4096-dim vectors. The storage spike was conducted with 768-dim test vectors, not Qwen3-8B's actual 4096-dim vectors. The summary doesn't flag this discrepancy — the sqlite-vec performance numbers (9.7ms p50 query) were benchmarked at 768-dim and may differ at 4096-dim. This is a known acceptable limitation (noted in ADR-002 consequences) but the summary could be more explicit about it."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "AGENTS.md specifies a strict 7-section ADR format but doesn't mention exceptions for summary/consolidation documents. ADR-000 uses a different structure (Purpose, Decided Questions, Open Questions, Prior Assumptions, Implementation Direction, Summary) which is appropriate for its role but diverges from the documented convention.",
+      "evidence": "AGENTS.md '## ADR Format' section mandates: Question/Context, Options Considered, Evaluation Method, Evidence, Decision, Consequences, Follow-up Work. docs/adr/000-decision-summary.md uses a completely different section structure."
+    },
+    {
+      "area": "skills",
+      "observation": "The research-worker skill's Step 4 (Run Experiments and Collect Data) doesn't apply to synthesis/consolidation features that aggregate existing spike results rather than running new experiments. The worker noted this in skillFeedback.suggestedChanges. The skill could benefit from a brief note about synthesis-type research tasks that don't involve new experiments.",
+      "evidence": "Worker skillFeedback.suggestedChanges: 'The research-worker skill's Step 4 (Run Experiments) doesn't cleanly apply to consolidation/summary features that synthesize existing spike results rather than running new experiments.' Transcript confirms worker skipped Step 4 and went directly from reading existing ADRs to writing the summary."
+    },
+    {
+      "area": "conventions",
+      "observation": "The handoff references commitId 'ad9651b' but the worker actually made two commits: ad9651b (the ADR) and 1efc261 (library update). The handoff schema only has a single commitId field, which may lose track of multi-commit features. This is minor for a 2-commit documentation feature but could matter for larger features.",
+      "evidence": "git log shows: 1efc261 library: add ADR-000 decision summary reference to architecture knowledge; ad9651b docs: ADR-000 decision summary. Handoff JSON has commitId: 'ad9651b' only."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "PASS. The decision summary is comprehensive, accurate, and meets all feature requirements: 5 decided questions with ADR references, exactly 2 open questions, and 22 prior assumptions categorized with evidence. Two non-blocking observations: (1) ADR-000 diverges from the standard ADR format (justified for a summary document but undocumented exception), (2) storage benchmark dimension mismatch (768-dim test vectors vs decided 4096-dim Qwen3-8B) is acknowledged in ADR-002 but not flagged in the summary. The worker also helpfully updated the shared library with the ADR-000 reference."
+}

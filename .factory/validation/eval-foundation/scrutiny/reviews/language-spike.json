@@ -1,0 +1,67 @@
+{
+  "featureId": "language-spike",
+  "reviewedAt": "2026-03-20T14:30:00.000Z",
+  "commitId": "1de0051",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The language spike is a thorough, well-executed comparison of Rust vs TypeScript/Bun across all 4 required dimensions (tree-sitter parsing, file tree traversal, CLI cold start, binary size). The ADR contains all 7 required sections with concrete benchmark data. Spike code is clean, reproducible, and properly structured. Two commits: 003e5a1 (spike code + ADR) and 1de0051 (library update). Both Rust and TS/Bun implementations are symmetrical, measuring equivalent operations. The benchmark runner script is well-documented and uses proper warmup phases. The .gitignore correctly excludes build artifacts (target/, node_modules/, Cargo.lock, bun.lock). Minor non-blocking issues noted below.",
+    "issues": [
+      {
+        "file": "spikes/language/ts-bun/src/walk.ts",
+        "line": 18,
+        "severity": "non_blocking",
+        "description": "File tree walk comparison is not apples-to-apples: Rust `ignore` crate with `hidden(false)` walks dotfiles while Bun `Glob.scan({dot: false})` skips them, resulting in different file counts (5818 vs 5419). The worker documented this discrepancy in the ADR and benchmark-results.json, and correctly argues the `ignore` crate is the right tool for Vera, so the comparison is fair for decision-making purposes even if raw timings aren't directly comparable."
+      },
+      {
+        "file": "spikes/language/ts-bun/src/parse.ts",
+        "line": 31,
+        "severity": "non_blocking",
+        "description": "Using the JavaScript tree-sitter parser for .ts files (comment says 'JS parser handles TS syntax partially') is not ideal — tree-sitter-typescript exists. However, this is acceptable for a spike; the key comparison is FFI overhead between Rust and Node bindings, not language grammar accuracy."
+      },
+      {
+        "file": "spikes/language/rust/src/parse.rs",
+        "line": 43,
+        "severity": "non_blocking",
+        "description": "AST walk uses a manual stack-based approach. The TS counterpart uses cursor methods (gotoFirstChild, gotoNextSibling, gotoParent). Both walk all nodes but the different traversal patterns could introduce minor constant-factor differences. Since the measured gap (1.6-1.8×) is large and consistent across 3 files, this doesn't materially affect the conclusion."
+      },
+      {
+        "file": "spikes/language/run-benchmarks.sh",
+        "line": 80,
+        "severity": "non_blocking",
+        "description": "Cold start benchmark uses bash date arithmetic with nanosecond precision, but the actual measurement includes bash loop overhead (seq, shell fork per iteration). For Rust's 0.51ms average, the bash loop overhead is relatively significant. A more precise measurement would use hyperfine or a dedicated timing harness. However, the 10× gap (0.51ms vs 5.09ms) is large enough that this doesn't change the directional conclusion."
+      },
+      {
+        "file": "spikes/language/results/benchmark-results.json",
+        "line": 1,
+        "severity": "non_blocking",
+        "description": "The benchmark-results.json contains manually curated results from multiple test files (3 parse benchmarks, 2 walk benchmarks) but the run-benchmarks.sh script only runs one parse file and one walk directory. The extra benchmarks (fastify hooks.test.js, turborepo builder.rs, ripgrep walk) were apparently run manually. The results JSON is comprehensive but the automated script doesn't fully reproduce all data points."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "The spike's .gitignore excludes Cargo.lock for the spike crate, which is correct for library/spike code. However, AGENTS.md doesn't have explicit guidance on whether spike Cargo.lock files should be committed or not. The root Cargo.lock IS committed (correct for a binary project). This convention gap could cause confusion for future spike workers.",
+      "evidence": "spikes/language/.gitignore line 4: 'rust/Cargo.lock'. Root Cargo.lock is committed (visible in git ls-tree). AGENTS.md mentions spikes/ directory but has no lockfile guidance."
+    },
+    {
+      "area": "skills",
+      "observation": "The research-worker skill procedure was followed correctly. The worker's skillFeedback suggests adding a standard step about .gitignore for spike build artifacts. This is a good suggestion — the worker had to create the .gitignore manually.",
+      "evidence": "handoff.skillFeedback.followedProcedure=true, suggestedChanges includes: 'The research-worker skill could suggest adding a .gitignore for spike build artifacts (target/, node_modules/) as a standard step, since spikes often produce large build artifacts that shouldn't be committed.'"
+    },
+    {
+      "area": "knowledge",
+      "observation": "The ADR section naming differs slightly from the format in AGENTS.md. AGENTS.md specifies 'Options' but the ADR uses 'Options Considered'. AGENTS.md specifies 'Question/Context' but the ADR uses just 'Question'. These are minor naming variations and all required content is present, but the section naming convention could be made more precise in AGENTS.md.",
+      "evidence": "AGENTS.md ADR Format section: '2. **Options Considered** - At least 2 options'. ADR-001 uses '## Options Considered' (matches). AGENTS.md: '1. **Question/Context**', ADR uses '## Question' (close enough). All 7 sections present."
+    },
+    {
+      "area": "services",
+      "observation": "No new services were started or used. The spike used only local CLI tools (cargo, bun, bash). No services.yaml updates needed.",
+      "evidence": "Transcript and handoff show only cargo build --release, bun install, and direct binary invocations."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "PASS. The language spike comprehensively compares Rust vs TypeScript/Bun across all 4 required operations with concrete benchmark data. The ADR-001 has all 7 required sections, contains specific timing numbers and ecosystem analysis, and makes a clear evidence-based decision for Rust. Spike code exists in spikes/language/ for both implementations, is well-structured and reproducible. The worker correctly excluded build artifacts via .gitignore and updated .factory/library/architecture.md with the decision summary. Five non-blocking issues noted: (1) walk comparison not perfectly apples-to-apples due to dotfile handling differences (documented by worker), (2) TS parser used for TypeScript files instead of tree-sitter-typescript, (3) different AST traversal implementations between Rust and TS, (4) cold start measurement includes shell overhead, (5) automated benchmark script doesn't reproduce all data points in the results JSON. None of these affect the validity of the decision."
+}
