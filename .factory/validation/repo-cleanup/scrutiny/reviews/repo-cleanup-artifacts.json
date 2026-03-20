@@ -1,0 +1,45 @@
+{
+  "featureId": "repo-cleanup-artifacts",
+  "reviewedAt": "2026-03-20T23:14:56.097610Z",
+  "commitId": "cf8338d93e090710d4f99913a4d36dcf6fbf0125",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The feature successfully removed tracked AI artifacts, updated `.gitignore`, and cleaned the public README, but the preservation half of the cleanup is incomplete: the `.dev/` archive contains broken copied skill symlinks and the resulting layout is not the documented top-level structure.",
+    "issues": [
+      {
+        "file": "/home/lamim/Development/Tools/Vera/.dev/references/skills/skills/firecrawl",
+        "line": 1,
+        "severity": "blocking",
+        "description": "The archived Firecrawl skill links were copied verbatim, so their relative targets now resolve to nonexistent `.dev/references/.agents/...` paths. All eight `firecrawl*` symlinks under `.dev/references/skills/skills/` are broken, which means part of the `.dev` archive is unusable instead of being a faithful preserved reference set."
+      },
+      {
+        "file": "/home/lamim/Development/Tools/Vera/.dev/README.md",
+        "line": 7,
+        "severity": "non_blocking",
+        "description": "The documented archive layout does not match the actual filesystem layout: the copied directories landed one level too deep (`.dev/validation/validation`, `.dev/library/library`, `.dev/references/skills/skills`). The archive is still navigable, but this undermines the promised clear structure and suggests the copy step should have moved directory contents instead of the directories themselves."
+      },
+      {
+        "file": "/home/lamim/Development/Tools/Vera/.factory/settings.json",
+        "line": 1,
+        "severity": "non_blocking",
+        "description": "`.factory/settings.json` was removed from git tracking in the reviewed commit, but no archived copy exists under `.dev/` (there is no `settings.json` anywhere in the archive). That leaves at least one Factory artifact outside the intended `.dev` archive, so the preservation pass is not fully complete."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "`implementation-worker` is being used for repo-cleanup tasks, but its procedure is almost entirely Rust/TDD oriented and does not explain how to handle live mission infrastructure during cleanup. The worker transcript shows a long detour reconciling the feature's archive instructions with `mission-worker-base` guidance about not moving `.factory/`.",
+      "evidence": "`.factory/skills/implementation-worker/SKILL.md:13-40` prescribes Rust-module/ADR/test-first work; `worker-transcripts.jsonl:40` contains extended reasoning about whether `.factory/` should be moved, copied, or kept in place because `mission-worker-base` says 'NEVER rename, delete, or modify the .factory/ folder'."
+    },
+    {
+      "area": "conventions",
+      "observation": "The shared state does not document how cleanup/archive tasks should treat copied directories that contain relative symlinks. A straightforward directory copy preserved the original `firecrawl*` symlink targets, which made the archived skill references break under `.dev/`.",
+      "evidence": "`.dev/references/skills/skills/firecrawl*` are broken symlinks resolving to `.dev/references/.agents/...`, while the actual archived agent skill directories live under `.dev/references/agents/skills/`."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Fail. The public-facing cleanup itself looks good, but the `.dev` preservation archive is not fully correct: eight archived skill links are broken, the copied directory layout is one level deeper than documented, and `.factory/settings.json` was not archived into `.dev`."
+}

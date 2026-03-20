@@ -1,0 +1,54 @@
+{
+  "milestone": "repo-cleanup",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "cargo test",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "cargo clippy -- -D warnings",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "cargo fmt --check",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "failedFeatures": [
+      "repo-cleanup-artifacts"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "repo-cleanup-artifacts",
+      "severity": "blocking",
+      "description": "Archived Firecrawl skill symlinks under .dev/references/skills/skills/firecrawl* still point at ../../.agents/... and are broken inside the .dev archive, leaving part of the preserved reference set unusable."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "skills",
+      "suggestion": "Clarify how cleanup/archive tasks should be handled when a milestone wants to preserve Factory artifacts while mission guidance forbids moving or deleting the live .factory/ directory. The relevant worker skill should explicitly instruct workers to keep the live mission infrastructure intact and archive copies separately when required.",
+      "evidence": "The repo-cleanup-artifacts review found the worker had to reconcile implementation-worker's Rust/TDD-oriented procedure with mission-worker-base guidance forbidding .factory/ moves, creating avoidable ambiguity during the cleanup task.",
+      "isSystemic": true
+    },
+    {
+      "target": "skills",
+      "suggestion": "Add archive/copy guidance for directories containing relative symlinks: copied archives should either preserve valid link targets or rewrite/resolve the symlinks so the archived reference set remains usable in its new location.",
+      "evidence": "The repo-cleanup-artifacts review found eight broken firecrawl* symlinks in .dev/references/skills/skills/ because they were copied with relative targets that only worked in the original .factory/.agents layout.",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [],
+  "previousRound": null
+}
