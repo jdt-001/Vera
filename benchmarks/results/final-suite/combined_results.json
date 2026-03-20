@@ -1,0 +1,1133 @@
+{
+  "vera_version": "vera 0.1.0",
+  "git_sha": "35550d933fa760ad2fd802002ad09342622e666d",
+  "timestamp": "2026-03-20T20:13:36.657896+00:00",
+  "modes": {
+    "bm25-only": {
+      "tool_name": "vera-bm25-only",
+      "mode": "bm25-only",
+      "per_task": [
+        {
+          "task_id": "config-001",
+          "category": "config",
+          "repo": "ripgrep",
+          "query": "Cargo.toml workspace configuration",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.0,
+            "recall_at_10": 0.0,
+            "mrr": 0.0,
+            "ndcg": 0.0,
+            "precision_at_3": 0.0
+          },
+          "latency_ms": 3.5878050002793316,
+          "result_count": 20
+        },
+        {
+          "task_id": "config-002",
+          "category": "config",
+          "repo": "fastify",
+          "query": "package.json dependencies and scripts",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.0,
+            "recall_at_10": 0.0,
+            "mrr": 0.0,
+            "ndcg": 0.0,
+            "precision_at_3": 0.0
+          },
+          "latency_ms": 2.9801845012116246,
+          "result_count": 20
+        },
+        {
+          "task_id": "config-004",
+          "category": "config",
+          "repo": "flask",
+          "query": "pyproject.toml build configuration",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.0,
+            "recall_at_10": 0.0,
+            "mrr": 0.0,
+            "ndcg": 0.0,
+            "precision_at_3": 0.0
+          },
+          "latency_ms": 3.0156259999785107,
+          "result_count": 20
+        },
+        {
+          "task_id": "cross-file-001",
+          "category": "cross_file",
+          "repo": "ripgrep",
+          "query": "Sink trait and its implementations",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.0,
+            "recall_at_10": 0.0,
+            "mrr": 0.06666666666666667,
+            "ndcg": 0.0,
+            "precision_at_3": 0.0
+          },
+          "latency_ms": 3.2474200015712995,
+          "result_count": 20
+        },
+        {
+          "task_id": "cross-file-002",
+          "category": "cross_file",
+          "repo": "flask",
+          "query": "Blueprint registration and route mounting",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.0,
+            "recall_at_10": 0.0,
+            "mrr": 0.0,
+            "ndcg": 0.0,
+            "precision_at_3": 0.0
+          },
+          "latency_ms": 2.9298789995664265,
+          "result_count": 20
+        },
+        {
+          "task_id": "disambig-001",
+          "category": "disambiguation",
+          "repo": "ripgrep",
+          "query": "Config",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.0,
+            "recall_at_10": 0.5,
+            "mrr": 0.14285714285714285,
+            "ndcg": 0.18216449358756576,
+            "precision_at_3": 0.0
+          },
+          "latency_ms": 3.3872899984999094,
+          "result_count": 20
+        },
+        {
+          "task_id": "disambig-002",
+          "category": "disambiguation",
+          "repo": "flask",
+          "query": "run",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.5,
+            "recall_at_10": 0.5,
+            "mrr": 0.5,
+            "ndcg": 0.23981246656813146,
+            "precision_at_3": 0.3333333333333333
+          },
+          "latency_ms": 2.985985000123037,
+          "result_count": 20
+        },
+        {
+          "task_id": "intent-001",
+          "category": "intent",
+          "repo": "flask",
+          "query": "how are HTTP errors handled and returned to clients",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.0,
+            "recall_at_10": 0.0,
+            "mrr": 0.07142857142857142,
+            "ndcg": 0.0,
+            "precision_at_3": 0.0
+          },
+          "latency_ms": 3.1754590017953888,
+          "result_count": 20
+        },
+        {
+          "task_id": "intent-002",
+          "category": "intent",
+          "repo": "flask",
+          "query": "session management and cookie handling",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.0,
+            "recall_at_10": 0.0,
+            "mrr": 0.09090909090909091,
+            "ndcg": 0.0,
+            "precision_at_3": 0.0
+          },
+          "latency_ms": 3.000201999384444,
+          "result_count": 20
+        },
+        {
+          "task_id": "intent-003",
+          "category": "intent",
+          "repo": "fastify",
+          "query": "request validation and schema enforcement",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.0,
+            "recall_at_10": 0.0,
+            "mrr": 0.0,
+            "ndcg": 0.0,
+            "precision_at_3": 0.0
+          },
+          "latency_ms": 3.194845496182097,
+          "result_count": 20
+        },
+        {
+          "task_id": "intent-004",
+          "category": "intent",
+          "repo": "ripgrep",
+          "query": "file type detection and filtering",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.0,
+            "recall_at_10": 0.0,
+            "mrr": 0.07142857142857142,
+            "ndcg": 0.0,
+            "precision_at_3": 0.0
+          },
+          "latency_ms": 3.146774000924779,
+          "result_count": 20
+        },
+        {
+          "task_id": "intent-005",
+          "category": "intent",
+          "repo": "flask",
+          "query": "template rendering pipeline",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.0,
+            "recall_at_10": 1.0,
+            "mrr": 0.1,
+            "ndcg": 0.2890648263178879,
+            "precision_at_3": 0.0
+          },
+          "latency_ms": 3.021732496563345,
+          "result_count": 20
+        },
+        {
+          "task_id": "symbol-lookup-001",
+          "category": "symbol_lookup",
+          "repo": "ripgrep",
+          "query": "Standard struct definition",
+          "retrieval_metrics": {
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "recall_at_10": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0,
+            "precision_at_3": 0.3333333333333333
+          },
+          "latency_ms": 2.9345875009312294,
+          "result_count": 20
+        },
+        {
+          "task_id": "symbol-lookup-002",
+          "category": "symbol_lookup",
+          "repo": "ripgrep",
+          "query": "Searcher struct definition",
+          "retrieval_metrics": {
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "recall_at_10": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0,
+            "precision_at_3": 0.3333333333333333
+          },
+          "latency_ms": 2.947957498690812,
+          "result_count": 20
+        },
+        {
+          "task_id": "symbol-lookup-003",
+          "category": "symbol_lookup",
+          "repo": "flask",
+          "query": "Flask class definition",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 1.0,
+            "recall_at_10": 1.0,
+            "mrr": 0.25,
+            "ndcg": 0.43067655807339306,
+            "precision_at_3": 0.0
+          },
+          "latency_ms": 3.2717655012675095,
+          "result_count": 20
+        },
+        {
+          "task_id": "symbol-lookup-004",
+          "category": "symbol_lookup",
+          "repo": "flask",
+          "query": "Blueprint class definition",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 1.0,
+            "recall_at_10": 1.0,
+            "mrr": 0.5,
+            "ndcg": 0.6309297535714575,
+            "precision_at_3": 0.3333333333333333
+          },
+          "latency_ms": 2.9080269996484276,
+          "result_count": 20
+        },
+        {
+          "task_id": "symbol-lookup-005",
+          "category": "symbol_lookup",
+          "repo": "ripgrep",
+          "query": "SearchWorker struct",
+          "retrieval_metrics": {
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "recall_at_10": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0,
+            "precision_at_3": 0.3333333333333333
+          },
+          "latency_ms": 2.893805500207236,
+          "result_count": 20
+        }
+      ],
+      "per_category": {
+        "config": {
+          "retrieval": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.0,
+            "recall_at_10": 0.0,
+            "mrr": 0.0,
+            "ndcg": 0.0,
+            "precision_at_3": 0.0
+          },
+          "latency_p50_ms": 3.0156259999785107,
+          "latency_p95_ms": 3.5305871002492495,
+          "task_count": 3
+        },
+        "cross_file": {
+          "retrieval": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.0,
+            "recall_at_10": 0.0,
+            "mrr": 0.03333333333333333,
+            "ndcg": 0.0,
+            "precision_at_3": 0.0
+          },
+          "latency_p50_ms": 3.088649500568863,
+          "latency_p95_ms": 3.231542951471056,
+          "task_count": 2
+        },
+        "disambiguation": {
+          "retrieval": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.25,
+            "recall_at_10": 0.5,
+            "mrr": 0.3214285714285714,
+            "ndcg": 0.2109884800778486,
+            "precision_at_3": 0.16666666666666666
+          },
+          "latency_p50_ms": 3.186637499311473,
+          "latency_p95_ms": 3.367224748581066,
+          "task_count": 2
+        },
+        "intent": {
+          "retrieval": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.0,
+            "recall_at_10": 0.2,
+            "mrr": 0.06675324675324676,
+            "ndcg": 0.05781296526357758,
+            "precision_at_3": 0.0
+          },
+          "latency_p50_ms": 3.146774000924779,
+          "latency_p95_ms": 3.1909681973047554,
+          "task_count": 5
+        },
+        "symbol_lookup": {
+          "retrieval": {
+            "recall_at_1": 0.6,
+            "recall_at_5": 1.0,
+            "recall_at_10": 1.0,
+            "mrr": 0.75,
+            "ndcg": 0.8123212623289702,
+            "precision_at_3": 0.26666666666666666
+          },
+          "latency_p50_ms": 2.9345875009312294,
+          "latency_p95_ms": 3.20700390075217,
+          "task_count": 5
+        }
+      },
+      "aggregate": {
+        "retrieval": {
+          "recall_at_1": 0.17647058823529413,
+          "recall_at_5": 0.3235294117647059,
+          "recall_at_10": 0.4117647058823529,
+          "mrr": 0.28195823784059076,
+          "ndcg": 0.2807440057716727,
+          "precision_at_3": 0.0980392156862745
+        },
+        "performance": {
+          "latency_p50_ms": 3.0372575020010117,
+          "latency_p95_ms": 3.572660150894079,
+          "total_queries": 34
+        },
+        "task_count": 17
+      }
+    },
+    "hybrid-norerank": {
+      "tool_name": "vera-hybrid-norerank",
+      "mode": "hybrid-norerank",
+      "per_task": [
+        {
+          "task_id": "config-001",
+          "category": "config",
+          "repo": "ripgrep",
+          "query": "Cargo.toml workspace configuration",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 1.0,
+            "recall_at_10": 1.0,
+            "mrr": 0.2,
+            "ndcg": 0.38685280723454163,
+            "precision_at_3": 0.0
+          },
+          "latency_ms": 967.3986050038366,
+          "result_count": 20
+        },
+        {
+          "task_id": "config-002",
+          "category": "config",
+          "repo": "fastify",
+          "query": "package.json dependencies and scripts",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.0,
+            "recall_at_10": 0.0,
+            "mrr": 0.025,
+            "ndcg": 0.0,
+            "precision_at_3": 0.0
+          },
+          "latency_ms": 1262.0285140001215,
+          "result_count": 20
+        },
+        {
+          "task_id": "config-004",
+          "category": "config",
+          "repo": "flask",
+          "query": "pyproject.toml build configuration",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.0,
+            "recall_at_10": 1.0,
+            "mrr": 0.16666666666666666,
+            "ndcg": 0.64527201342591,
+            "precision_at_3": 0.0
+          },
+          "latency_ms": 1019.5792894992337,
+          "result_count": 20
+        },
+        {
+          "task_id": "cross-file-001",
+          "category": "cross_file",
+          "repo": "ripgrep",
+          "query": "Sink trait and its implementations",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.0,
+            "recall_at_10": 0.3333333333333333,
+            "mrr": 0.125,
+            "ndcg": 0.20151514190050246,
+            "precision_at_3": 0.0
+          },
+          "latency_ms": 892.2641834979004,
+          "result_count": 20
+        },
+        {
+          "task_id": "cross-file-002",
+          "category": "cross_file",
+          "repo": "flask",
+          "query": "Blueprint registration and route mounting",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.0,
+            "recall_at_10": 0.0,
+            "mrr": 0.09090909090909091,
+            "ndcg": 0.0,
+            "precision_at_3": 0.0
+          },
+          "latency_ms": 897.1151294972515,
+          "result_count": 20
+        },
+        {
+          "task_id": "disambig-001",
+          "category": "disambiguation",
+          "repo": "ripgrep",
+          "query": "Config",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.0,
+            "recall_at_10": 0.0,
+            "mrr": 0.07692307692307693,
+            "ndcg": 0.0,
+            "precision_at_3": 0.0
+          },
+          "latency_ms": 1314.508832499996,
+          "result_count": 20
+        },
+        {
+          "task_id": "disambig-002",
+          "category": "disambiguation",
+          "repo": "flask",
+          "query": "run",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.0,
+            "recall_at_10": 0.5,
+            "mrr": 0.11805555555555555,
+            "ndcg": 0.11716292911523485,
+            "precision_at_3": 0.0
+          },
+          "latency_ms": 1052.1596930011583,
+          "result_count": 20
+        },
+        {
+          "task_id": "intent-001",
+          "category": "intent",
+          "repo": "flask",
+          "query": "how are HTTP errors handled and returned to clients",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.0,
+            "recall_at_10": 0.5,
+            "mrr": 0.125,
+            "ndcg": 0.19342640361727081,
+            "precision_at_3": 0.0
+          },
+          "latency_ms": 889.6491699997569,
+          "result_count": 20
+        },
+        {
+          "task_id": "intent-002",
+          "category": "intent",
+          "repo": "flask",
+          "query": "session management and cookie handling",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 1.0,
+            "recall_at_10": 1.0,
+            "mrr": 0.3333333333333333,
+            "ndcg": 0.7890648263178879,
+            "precision_at_3": 0.3333333333333333
+          },
+          "latency_ms": 956.565076001425,
+          "result_count": 20
+        },
+        {
+          "task_id": "intent-003",
+          "category": "intent",
+          "repo": "fastify",
+          "query": "request validation and schema enforcement",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.0,
+            "recall_at_10": 0.0,
+            "mrr": 0.0,
+            "ndcg": 0.0,
+            "precision_at_3": 0.0
+          },
+          "latency_ms": 963.9084880000155,
+          "result_count": 20
+        },
+        {
+          "task_id": "intent-004",
+          "category": "intent",
+          "repo": "ripgrep",
+          "query": "file type detection and filtering",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 1.0,
+            "recall_at_10": 1.0,
+            "mrr": 0.2,
+            "ndcg": 0.997365095011205,
+            "precision_at_3": 0.0
+          },
+          "latency_ms": 879.7515555015707,
+          "result_count": 20
+        },
+        {
+          "task_id": "intent-005",
+          "category": "intent",
+          "repo": "flask",
+          "query": "template rendering pipeline",
+          "retrieval_metrics": {
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "recall_at_10": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.7890648263178879,
+            "precision_at_3": 0.6666666666666666
+          },
+          "latency_ms": 959.1653945026337,
+          "result_count": 20
+        },
+        {
+          "task_id": "symbol-lookup-001",
+          "category": "symbol_lookup",
+          "repo": "ripgrep",
+          "query": "Standard struct definition",
+          "retrieval_metrics": {
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "recall_at_10": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0,
+            "precision_at_3": 0.3333333333333333
+          },
+          "latency_ms": 1001.696991497738,
+          "result_count": 20
+        },
+        {
+          "task_id": "symbol-lookup-002",
+          "category": "symbol_lookup",
+          "repo": "ripgrep",
+          "query": "Searcher struct definition",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 1.0,
+            "recall_at_10": 1.0,
+            "mrr": 0.5,
+            "ndcg": 0.6309297535714575,
+            "precision_at_3": 0.3333333333333333
+          },
+          "latency_ms": 1158.944587004953,
+          "result_count": 20
+        },
+        {
+          "task_id": "symbol-lookup-003",
+          "category": "symbol_lookup",
+          "repo": "flask",
+          "query": "Flask class definition",
+          "retrieval_metrics": {
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "recall_at_10": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0,
+            "precision_at_3": 0.3333333333333333
+          },
+          "latency_ms": 1608.6023155039584,
+          "result_count": 20
+        },
+        {
+          "task_id": "symbol-lookup-004",
+          "category": "symbol_lookup",
+          "repo": "flask",
+          "query": "Blueprint class definition",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 1.0,
+            "recall_at_10": 1.0,
+            "mrr": 0.5,
+            "ndcg": 0.6309297535714575,
+            "precision_at_3": 0.3333333333333333
+          },
+          "latency_ms": 1093.7880530036637,
+          "result_count": 20
+        },
+        {
+          "task_id": "symbol-lookup-005",
+          "category": "symbol_lookup",
+          "repo": "ripgrep",
+          "query": "SearchWorker struct",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 1.0,
+            "recall_at_10": 1.0,
+            "mrr": 0.25,
+            "ndcg": 0.43067655807339306,
+            "precision_at_3": 0.0
+          },
+          "latency_ms": 2881.3360655003635,
+          "result_count": 20
+        }
+      ],
+      "per_category": {
+        "config": {
+          "retrieval": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.3333333333333333,
+            "recall_at_10": 0.6666666666666666,
+            "mrr": 0.13055555555555556,
+            "ndcg": 0.34404160688681723,
+            "precision_at_3": 0.0
+          },
+          "latency_p50_ms": 1019.5792894992337,
+          "latency_p95_ms": 1237.7835915500327,
+          "task_count": 3
+        },
+        "cross_file": {
+          "retrieval": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.0,
+            "recall_at_10": 0.16666666666666666,
+            "mrr": 0.10795454545454546,
+            "ndcg": 0.10075757095025123,
+            "precision_at_3": 0.0
+          },
+          "latency_p50_ms": 894.6896564975759,
+          "latency_p95_ms": 896.8725821972839,
+          "task_count": 2
+        },
+        "disambiguation": {
+          "retrieval": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.0,
+            "recall_at_10": 0.25,
+            "mrr": 0.09748931623931624,
+            "ndcg": 0.058581464557617424,
+            "precision_at_3": 0.0
+          },
+          "latency_p50_ms": 1183.3342627505772,
+          "latency_p95_ms": 1301.3913755250542,
+          "task_count": 2
+        },
+        "intent": {
+          "retrieval": {
+            "recall_at_1": 0.2,
+            "recall_at_5": 0.6,
+            "recall_at_10": 0.7,
+            "mrr": 0.33166666666666667,
+            "ndcg": 0.7537842302528504,
+            "precision_at_3": 0.2
+          },
+          "latency_p50_ms": 956.565076001425,
+          "latency_p95_ms": 962.9598693005391,
+          "task_count": 5
+        },
+        "symbol_lookup": {
+          "retrieval": {
+            "recall_at_1": 0.4,
+            "recall_at_5": 1.0,
+            "recall_at_10": 1.0,
+            "mrr": 0.65,
+            "ndcg": 0.7385072130432616,
+            "precision_at_3": 0.26666666666666666
+          },
+          "latency_p50_ms": 1158.944587004953,
+          "latency_p95_ms": 2626.7893155010825,
+          "task_count": 5
+        }
+      },
+      "aggregate": {
+        "retrieval": {
+          "recall_at_1": 0.17647058823529413,
+          "recall_at_5": 0.5294117647058824,
+          "recall_at_10": 0.6666666666666667,
+          "mrr": 0.33593457196398374,
+          "ndcg": 0.5183682416562793,
+          "precision_at_3": 0.1372549019607843
+        },
+        "performance": {
+          "latency_p50_ms": 908.6014874992543,
+          "latency_p95_ms": 1953.6163813023436,
+          "total_queries": 34
+        },
+        "task_count": 17
+      }
+    },
+    "hybrid": {
+      "tool_name": "vera-hybrid",
+      "mode": "hybrid",
+      "per_task": [
+        {
+          "task_id": "config-001",
+          "category": "config",
+          "repo": "ripgrep",
+          "query": "Cargo.toml workspace configuration",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 1.0,
+            "recall_at_10": 1.0,
+            "mrr": 0.5,
+            "ndcg": 1.1309297535714575,
+            "precision_at_3": 0.6666666666666666
+          },
+          "latency_ms": 5242.087417500443,
+          "result_count": 20
+        },
+        {
+          "task_id": "config-002",
+          "category": "config",
+          "repo": "fastify",
+          "query": "package.json dependencies and scripts",
+          "retrieval_metrics": {
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "recall_at_10": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.7640098914067264,
+            "precision_at_3": 0.3333333333333333
+          },
+          "latency_ms": 3213.8226904971816,
+          "result_count": 20
+        },
+        {
+          "task_id": "config-004",
+          "category": "config",
+          "repo": "flask",
+          "query": "pyproject.toml build configuration",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 1.0,
+            "recall_at_10": 1.0,
+            "mrr": 0.25,
+            "ndcg": 0.7868837451814152,
+            "precision_at_3": 0.0
+          },
+          "latency_ms": 3771.8952799987164,
+          "result_count": 20
+        },
+        {
+          "task_id": "cross-file-001",
+          "category": "cross_file",
+          "repo": "ripgrep",
+          "query": "Sink trait and its implementations",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.3333333333333333,
+            "recall_at_10": 0.3333333333333333,
+            "mrr": 0.5,
+            "ndcg": 0.4030302838010049,
+            "precision_at_3": 0.3333333333333333
+          },
+          "latency_ms": 2506.5470579975226,
+          "result_count": 20
+        },
+        {
+          "task_id": "cross-file-002",
+          "category": "cross_file",
+          "repo": "flask",
+          "query": "Blueprint registration and route mounting",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.0,
+            "recall_at_10": 0.0,
+            "mrr": 0.09090909090909091,
+            "ndcg": 0.0,
+            "precision_at_3": 0.0
+          },
+          "latency_ms": 7285.113547000947,
+          "result_count": 20
+        },
+        {
+          "task_id": "disambig-001",
+          "category": "disambiguation",
+          "repo": "ripgrep",
+          "query": "Config",
+          "retrieval_metrics": {
+            "recall_at_1": 0.25,
+            "recall_at_5": 0.5,
+            "recall_at_10": 0.5,
+            "mrr": 1.0,
+            "ndcg": 0.3893896983223993,
+            "precision_at_3": 0.3333333333333333
+          },
+          "latency_ms": 2600.455409501592,
+          "result_count": 20
+        },
+        {
+          "task_id": "disambig-002",
+          "category": "disambiguation",
+          "repo": "flask",
+          "query": "run",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.5,
+            "recall_at_10": 0.5,
+            "mrr": 0.2,
+            "ndcg": 0.14704034066641014,
+            "precision_at_3": 0.0
+          },
+          "latency_ms": 4571.178399997734,
+          "result_count": 20
+        },
+        {
+          "task_id": "intent-001",
+          "category": "intent",
+          "repo": "flask",
+          "query": "how are HTTP errors handled and returned to clients",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.0,
+            "recall_at_10": 0.5,
+            "mrr": 0.1,
+            "ndcg": 0.17723928678404774,
+            "precision_at_3": 0.0
+          },
+          "latency_ms": 4433.843582999543,
+          "result_count": 20
+        },
+        {
+          "task_id": "intent-002",
+          "category": "intent",
+          "repo": "flask",
+          "query": "session management and cookie handling",
+          "retrieval_metrics": {
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "recall_at_10": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.79867161237003,
+            "precision_at_3": 0.5
+          },
+          "latency_ms": 4332.646544502495,
+          "result_count": 20
+        },
+        {
+          "task_id": "intent-003",
+          "category": "intent",
+          "repo": "fastify",
+          "query": "request validation and schema enforcement",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.0,
+            "recall_at_10": 0.0,
+            "mrr": 0.0,
+            "ndcg": 0.0,
+            "precision_at_3": 0.0
+          },
+          "latency_ms": 7497.191277499951,
+          "result_count": 20
+        },
+        {
+          "task_id": "intent-004",
+          "category": "intent",
+          "repo": "ripgrep",
+          "query": "file type detection and filtering",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 1.0,
+            "recall_at_10": 1.0,
+            "mrr": 0.2,
+            "ndcg": 0.38685280723454163,
+            "precision_at_3": 0.0
+          },
+          "latency_ms": 4625.214165000216,
+          "result_count": 20
+        },
+        {
+          "task_id": "intent-005",
+          "category": "intent",
+          "repo": "flask",
+          "query": "template rendering pipeline",
+          "retrieval_metrics": {
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "recall_at_10": 1.0,
+            "mrr": 1.0,
+            "ndcg": 2.2112651326703876,
+            "precision_at_3": 0.6666666666666666
+          },
+          "latency_ms": 2719.1087549981603,
+          "result_count": 20
+        },
+        {
+          "task_id": "symbol-lookup-001",
+          "category": "symbol_lookup",
+          "repo": "ripgrep",
+          "query": "Standard struct definition",
+          "retrieval_metrics": {
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "recall_at_10": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0,
+            "precision_at_3": 0.3333333333333333
+          },
+          "latency_ms": 2673.862678002479,
+          "result_count": 20
+        },
+        {
+          "task_id": "symbol-lookup-002",
+          "category": "symbol_lookup",
+          "repo": "ripgrep",
+          "query": "Searcher struct definition",
+          "retrieval_metrics": {
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "recall_at_10": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0,
+            "precision_at_3": 0.3333333333333333
+          },
+          "latency_ms": 2970.1869134987646,
+          "result_count": 20
+        },
+        {
+          "task_id": "symbol-lookup-003",
+          "category": "symbol_lookup",
+          "repo": "flask",
+          "query": "Flask class definition",
+          "retrieval_metrics": {
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "recall_at_10": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0,
+            "precision_at_3": 0.3333333333333333
+          },
+          "latency_ms": 4894.778604000749,
+          "result_count": 20
+        },
+        {
+          "task_id": "symbol-lookup-004",
+          "category": "symbol_lookup",
+          "repo": "flask",
+          "query": "Blueprint class definition",
+          "retrieval_metrics": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 1.0,
+            "recall_at_10": 1.0,
+            "mrr": 0.25,
+            "ndcg": 0.43067655807339306,
+            "precision_at_3": 0.0
+          },
+          "latency_ms": 4212.886274999619,
+          "result_count": 20
+        },
+        {
+          "task_id": "symbol-lookup-005",
+          "category": "symbol_lookup",
+          "repo": "ripgrep",
+          "query": "SearchWorker struct",
+          "retrieval_metrics": {
+            "recall_at_1": 1.0,
+            "recall_at_5": 1.0,
+            "recall_at_10": 1.0,
+            "mrr": 1.0,
+            "ndcg": 1.0,
+            "precision_at_3": 0.3333333333333333
+          },
+          "latency_ms": 2880.481364998559,
+          "result_count": 20
+        }
+      ],
+      "per_category": {
+        "config": {
+          "retrieval": {
+            "recall_at_1": 0.3333333333333333,
+            "recall_at_5": 1.0,
+            "recall_at_10": 1.0,
+            "mrr": 0.5833333333333334,
+            "ndcg": 1.2272744633865331,
+            "precision_at_3": 0.3333333333333333
+          },
+          "latency_p50_ms": 3771.8952799987164,
+          "latency_p95_ms": 5095.068203750269,
+          "task_count": 3
+        },
+        "cross_file": {
+          "retrieval": {
+            "recall_at_1": 0.0,
+            "recall_at_5": 0.16666666666666666,
+            "recall_at_10": 0.16666666666666666,
+            "mrr": 0.29545454545454547,
+            "ndcg": 0.20151514190050246,
+            "precision_at_3": 0.16666666666666666
+          },
+          "latency_p50_ms": 4895.830302499235,
+          "latency_p95_ms": 7046.1852225507755,
+          "task_count": 2
+        },
+        "disambiguation": {
+          "retrieval": {
+            "recall_at_1": 0.125,
+            "recall_at_5": 0.5,
+            "recall_at_10": 0.5,
+            "mrr": 0.6,
+            "ndcg": 0.26821501949440474,
+            "precision_at_3": 0.16666666666666666
+          },
+          "latency_p50_ms": 3585.816904749663,
+          "latency_p95_ms": 4472.642250472927,
+          "task_count": 2
+        },
+        "intent": {
+          "retrieval": {
+            "recall_at_1": 0.4,
+            "recall_at_5": 0.6,
+            "recall_at_10": 0.7,
+            "mrr": 0.45999999999999996,
+            "ndcg": 0.9148057678118013,
+            "precision_at_3": 0.2333333333333333
+          },
+          "latency_p50_ms": 4433.843582999543,
+          "latency_p95_ms": 6922.795855000004,
+          "task_count": 5
+        },
+        "symbol_lookup": {
+          "retrieval": {
+            "recall_at_1": 0.8,
+            "recall_at_5": 1.0,
+            "recall_at_10": 1.0,
+            "mrr": 0.85,
+            "ndcg": 0.8861353116146786,
+            "precision_at_3": 0.26666666666666666
+          },
+          "latency_p50_ms": 2970.1869134987646,
+          "latency_p95_ms": 4758.400138200523,
+          "task_count": 5
+        }
+      },
+      "aggregate": {
+        "retrieval": {
+          "recall_at_1": 0.4264705882352941,
+          "recall_at_5": 0.7254901960784315,
+          "recall_at_10": 0.7549019607843137,
+          "mrr": 0.5935828877005348,
+          "ndcg": 0.8015287711812831,
+          "precision_at_3": 0.24509803921568624
+        },
+        "performance": {
+          "latency_p50_ms": 3923.6344964992895,
+          "latency_p95_ms": 7491.029165102369,
+          "total_queries": 34
+        },
+        "task_count": 17
+      }
+    }
+  },
+  "index_stats": [
+    {
+      "repo": "ripgrep",
+      "success": true,
+      "time_secs": 62.67729608099762,
+      "files_parsed": 209,
+      "chunks_created": 5377,
+      "storage_bytes": 34002753,
+      "source_bytes": 24588854,
+      "size_ratio": 1.383
+    },
+    {
+      "repo": "flask",
+      "success": true,
+      "time_secs": 10.130773160999524,
+      "files_parsed": 225,
+      "chunks_created": 1297,
+      "storage_bytes": 11785898,
+      "source_bytes": 16360775,
+      "size_ratio": 0.72
+    },
+    {
+      "repo": "fastify",
+      "success": true,
+      "time_secs": 34.79007248600101,
+      "files_parsed": 381,
+      "chunks_created": 2896,
+      "storage_bytes": 19148822,
+      "source_bytes": 28426933,
+      "size_ratio": 0.674
+    },
+    {
+      "repo": "turborepo",
+      "success": false,
+      "time_secs": 35.29840824400162,
+      "error": "\u001b[2m2026-03-20T20:16:09.360866Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mvera_core::indexing::pipeline\u001b[0m\u001b[2m:\u001b[0m failed to read file for parsing \u001b[3mfile\u001b[0m\u001b[2m=\u001b[0mcrates/turborepo-vt100/tests/data/fixtures/split_utf8/10.typescript \u001b[3merror\u001b[0m\u001b[2m=\u001b[0mstream did not contain valid UTF-8\n\u001b[2m2026-03-20T20:16:09.360891Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mvera_core::indexing::pipeline\u001b[0m\u001b[2m:\u001b[0m failed to read file for parsing \u001b[3mfile\u001b[0m\u001b[2m=\u001b[0mcrates/turborepo-vt100/tests/data/fixtures/split_utf8/2.typescript \u001b[3mer"
+    }
+  ],
+  "update_stats": {
+    "time_secs": 3.1326652279967675,
+    "files_updated": "?",
+    "success": true
+  }
+}
