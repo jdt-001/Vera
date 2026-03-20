@@ -153,3 +153,62 @@ For multi-message testing, use a script that sends multiple JSON-RPC messages on
 - Reranker API may have connectivity issues — Vera degrades gracefully.
 - Embedding API may occasionally timeout — accept BM25 fallback for search tests.
 - `vera update` requires the target directory to already have a `.vera/` index directory.
+
+## Flow Validator Guidance: Polish-Release Benchmarks
+
+**Testing tool:** `Execute` tool for inspecting benchmark result files and reports.
+
+**All assertions in this group are read-only verification** — no Vera CLI commands needed, no API credentials needed. You are verifying that benchmark artifacts exist and contain required content.
+
+**Key file locations:**
+- Benchmark reports: `/home/lamim/Development/Tools/Vera/benchmarks/reports/`
+  - `final-benchmark-suite.md` — main benchmark report
+  - `reproduction-guide.md` — reproduction instructions
+  - `ablation-studies.md` — ablation study results
+  - `competitor-baselines.md` — competitor baseline results
+- Benchmark results (JSON): `/home/lamim/Development/Tools/Vera/benchmarks/results/`
+  - `final-suite/combined_results.json` — combined results
+  - `final-suite/vera_hybrid_results.json` — Vera hybrid results
+  - `final-suite/vera_bm25_only_results.json` — BM25-only results
+  - `ablation-studies/ablation_results.json` — ablation data
+- Eval tasks: `/home/lamim/Development/Tools/Vera/eval/tasks/` — task definitions with ground truth
+
+**What to verify for each assertion:**
+- VAL-BENCH-001: A single command produces complete benchmark report with all tasks, metrics, baselines, Vera results
+- VAL-BENCH-002: Vera outperforms lexical baseline (ripgrep) on semantic/intent tasks by 10%+ relative on Recall@5 or MRR
+- VAL-BENCH-003: Vera hybrid Recall@1 exceeds pure vector-only on exact symbol lookup tasks
+- VAL-BENCH-004: Ablation studies documented for: hybrid vs semantic-only, hybrid vs lexical-only, reranker on/off, 2+ embedding models, each with per-category breakdown
+- VAL-BENCH-005: Performance targets met: 100K LOC index <120s, BM25 p95 <10ms, cached hybrid p95 <100ms, incremental <5s, index <2x source
+- VAL-BENCH-006: Formatted comparison table suitable for README, reproduction guide with versions/setup/commands/expected ranges
+
+**Isolation:** All read-only. No contention concerns.
+
+## Flow Validator Guidance: Polish-Release Documentation
+
+**Testing tool:** `Execute` tool for reading files and running CLI verification commands.
+
+**Vera binary:** `/home/lamim/Development/Tools/Vera/target/release/vera`
+
+**Key file locations:**
+- README: `/home/lamim/Development/Tools/Vera/README.md`
+- SKILL.md: `/home/lamim/Development/Tools/Vera/SKILL.md`
+- Cargo.toml: `/home/lamim/Development/Tools/Vera/Cargo.toml`
+- ADRs: `/home/lamim/Development/Tools/Vera/docs/adr/` (001-004 + 000-decision-summary)
+- Recommendation memo: `/home/lamim/Development/Tools/Vera/docs/recommendation-memo.md`
+- Maintainability audit: `/home/lamim/Development/Tools/Vera/docs/maintainability-audit.md`
+
+**What to verify for each assertion:**
+- VAL-DOCS-001: README has installation (prerequisites, install cmd, verification), usage quickstart (index + search with sample output), benchmark results table
+- VAL-DOCS-002: SKILL.md covers purpose, when-to-use, commands with examples, output interpretation, query tips. Under 2000 tokens (~8000 chars). Every documented command works
+- VAL-DOCS-003: All ADRs in Accepted/Superseded status, none Draft/Proposed
+- VAL-DOCS-004: Recommendation memo covers: chosen architecture + rationale, rejected paths + reasons, open risks, next steps
+- VAL-DOCS-005: Maintainability audit covers: module sizes vs budgets, function sizes vs budgets, ownership boundaries, test coverage, dead code
+- VAL-DOCS-006: No dead experimental code in main branch, spikes in archive or labeled
+
+**For VAL-DOCS-002 command verification:** Source secrets.env before running vera commands:
+```bash
+set -a && source /home/lamim/Development/Tools/Vera/secrets.env && set +a
+```
+Pre-indexed repos at `.bench/repos/flask`, `.bench/repos/fastify`, `.bench/repos/ripgrep` are available.
+
+**Isolation:** Mostly read-only file inspection. CLI command testing uses pre-indexed repos (read-only search). Safe to run concurrently with other groups.
