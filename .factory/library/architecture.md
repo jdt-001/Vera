@@ -16,6 +16,14 @@ Architectural decisions, patterns, and conventions for Vera.
 - Superior ecosystem: `ignore` crate, Tantivy, Lance, Clap
 - See `docs/adr/001-implementation-language.md` for full evidence
 
+### ADR-002: Storage Backend → SQLite + sqlite-vec + Tantivy
+- SQLite + sqlite-vec for metadata and vector search, Tantivy for BM25
+- Chosen over LanceDB despite LanceDB's 5× faster vector queries and 32× faster writes
+- SQLite performance is sufficient: 10ms vector query p50, 7.6K chunks/sec writes
+- Key advantage: ~60 crates vs 537 (LanceDB), 40s vs 150s build time, sync API
+- Tantivy BM25 is sub-millisecond (0.067ms p50) — uncontested for full-text search
+- See `docs/adr/002-storage-backend.md` for full evidence
+
 ## Baseline Findings from M1 Competitor Benchmarks
 
 Key insights from competitor baseline benchmarking (21 tasks, 4 repos):
