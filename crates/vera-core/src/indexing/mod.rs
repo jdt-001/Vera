@@ -6,10 +6,6 @@
 //! - Building vector indexes via sqlite-vec
 //! - Incremental update logic (detect changed files, re-index only those)
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn module_loads() {
-        // Placeholder: will be replaced with real indexing tests.
-    }
-}
+pub mod pipeline;
+
+pub use pipeline::{FileError, IndexSummary, index_dir, index_repository};

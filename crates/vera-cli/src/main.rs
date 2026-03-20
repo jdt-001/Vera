@@ -6,6 +6,9 @@
 //!   vera update <path>   Incrementally update the index
 //!   vera stats            Show index statistics
 
+use std::path::Path;
+use std::process;
+
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -74,7 +77,7 @@ fn main() -> anyhow::Result<()> {
     match cli.command {
         Commands::Index { path } => {
             tracing::info!(path = %path, "indexing");
-            eprintln!("vera index: not yet implemented (path: {path})");
+            run_index(&path, cli.json)?;
         }
         Commands::Search {
             query,
@@ -97,6 +100,116 @@ fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+/// Run the `vera index <path>` command.
+fn run_index(path: &str, json_output: bool) -> anyhow::Result<()> {
+    let repo_path = Path::new(path);
+
+    // Validate path early — before requiring API credentials.
+    if !repo_path.exists() {
+        eprintln!("Error: path does not exist: {path}");
+        process::exit(1);
+    }
+    if !repo_path.is_dir() {
+        eprintln!("Error: path is not a directory: {path}");
+        process::exit(1);
+    }
+
+    // Build the tokio runtime for async embedding calls.
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| anyhow::anyhow!("failed to create async runtime: {e}"))?;
+
+    let config = vera_core::config::VeraConfig::default();
+
+    // Create the embedding provider from environment.
+    let provider_config = match vera_core::embedding::EmbeddingProviderConfig::from_env() {
+        Ok(cfg) => cfg,
+        Err(err) => {
+            eprintln!(
+                "Error: embedding API not configured: {err}\n\
+                 Set EMBEDDING_MODEL_BASE_URL, EMBEDDING_MODEL_ID, and \
+                 EMBEDDING_MODEL_API_KEY environment variables."
+            );
+            process::exit(1);
+        }
+    };
+    let provider_config = provider_config
+        .with_timeout(std::time::Duration::from_secs(
+            config.embedding.timeout_secs,
+        ))
+        .with_max_retries(config.embedding.max_retries);
+
+    let provider = match vera_core::embedding::OpenAiProvider::new(provider_config) {
+        Ok(p) => p,
+        Err(err) => {
+            eprintln!("Error: failed to initialize embedding provider: {err}");
+            process::exit(1);
+        }
+    };
+
+    // Run the indexing pipeline.
+    let summary = match rt.block_on(vera_core::indexing::index_repository(
+        repo_path, &provider, &config,
+    )) {
+        Ok(s) => s,
+        Err(err) => {
+            eprintln!("Error: {err:#}");
+            process::exit(1);
+        }
+    };
+
+    // Output results.
+    if json_output {
+        let json = serde_json::to_string_pretty(&summary)
+            .map_err(|e| anyhow::anyhow!("failed to serialize summary: {e}"))?;
+        println!("{json}");
+    } else {
+        print_human_summary(&summary);
+    }
+
+    Ok(())
+}
+
+/// Print a human-readable summary of the indexing run.
+fn print_human_summary(summary: &vera_core::indexing::IndexSummary) {
+    println!("Indexing complete!");
+    println!();
+    println!("  Files parsed:        {}", summary.files_parsed);
+    println!("  Chunks created:      {}", summary.chunks_created);
+    println!("  Embeddings generated: {}", summary.embeddings_generated);
+    println!("  Elapsed time:        {:.2}s", summary.elapsed_secs);
+
+    // Report skipped files if any.
+    let skipped_total = summary.binary_skipped + summary.large_skipped + summary.error_skipped;
+    if skipped_total > 0 {
+        println!();
+        println!("  Skipped files:");
+        if summary.binary_skipped > 0 {
+            println!("    Binary:     {}", summary.binary_skipped);
+        }
+        if summary.large_skipped > 0 {
+            println!("    Too large:  {}", summary.large_skipped);
+        }
+        if summary.error_skipped > 0 {
+            println!("    Read errors: {}", summary.error_skipped);
+        }
+    }
+
+    // Report parse errors if any.
+    if !summary.parse_errors.is_empty() {
+        println!();
+        println!("  Parse errors ({}):", summary.parse_errors.len());
+        for err in &summary.parse_errors {
+            println!("    {}: {}", err.file_path, err.error);
+        }
+    }
+
+    // Special message for empty repos.
+    if summary.files_parsed == 0 && summary.chunks_created == 0 {
+        println!();
+        println!("  No source files found to index.");
+    }
 }
 
 #[cfg(test)]

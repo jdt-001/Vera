@@ -13,5 +13,11 @@ pub use provider::{
     EmbeddingError, EmbeddingProvider, EmbeddingProviderConfig, OpenAiProvider, embed_chunks,
 };
 
+/// Test helpers for creating mock embedding providers.
+#[cfg(test)]
+pub(crate) mod test_helpers {
+    pub use super::provider::test_helpers::MockProvider;
+}
+
 #[cfg(test)]
 mod tests;

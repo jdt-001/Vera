@@ -1,0 +1,315 @@
+//! Indexing pipeline orchestrator.
+//!
+//! Coordinates file discovery, parsing, chunking, embedding, and storage
+//! into a single `index_repository` entry point. Produces an [`IndexSummary`]
+//! describing the work performed.
+
+use std::path::Path;
+use std::time::Instant;
+
+use anyhow::{Context, Result, bail};
+use tracing::{debug, info, warn};
+
+use crate::config::VeraConfig;
+use crate::discovery::{self, DiscoveryResult};
+use crate::embedding::{EmbeddingProvider, embed_chunks};
+use crate::parsing;
+use crate::storage::bm25::{Bm25Document, Bm25Index};
+use crate::storage::metadata::MetadataStore;
+use crate::storage::vector::VectorStore;
+use crate::types::{Chunk, Language};
+
+// ── Index summary ────────────────────────────────────────────────────
+
+/// Summary of an indexing run, suitable for display to the user.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct IndexSummary {
+    /// Number of source files parsed.
+    pub files_parsed: usize,
+    /// Number of chunks created from parsed files.
+    pub chunks_created: usize,
+    /// Number of embedding vectors generated.
+    pub embeddings_generated: usize,
+    /// Number of binary files skipped.
+    pub binary_skipped: usize,
+    /// Number of files skipped due to size threshold.
+    pub large_skipped: usize,
+    /// Number of files skipped due to permission or read errors.
+    pub error_skipped: usize,
+    /// Files that had parse errors (path + error message).
+    pub parse_errors: Vec<FileError>,
+    /// Wall-clock elapsed time in seconds.
+    pub elapsed_secs: f64,
+}
+
+/// A file-level error encountered during indexing.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct FileError {
+    pub file_path: String,
+    pub error: String,
+}
+
+// ── Index directory layout ───────────────────────────────────────────
+
+/// Default index directory name (placed inside the indexed repo).
+const INDEX_DIR_NAME: &str = ".vera";
+
+/// Subdirectory for BM25 (Tantivy) index files.
+const BM25_SUBDIR: &str = "bm25";
+
+/// Filename for SQLite metadata + vector databases.
+const METADATA_DB: &str = "metadata.db";
+const VECTOR_DB: &str = "vectors.db";
+
+/// Resolve the index directory for a given repository root.
+pub fn index_dir(repo_root: &Path) -> std::path::PathBuf {
+    repo_root.join(INDEX_DIR_NAME)
+}
+
+// ── Pipeline entry point ─────────────────────────────────────────────
+
+/// Index a repository: discover files, parse, chunk, embed, and store.
+///
+/// This is the main orchestrator for `vera index <path>`. It:
+/// 1. Validates the input path
+/// 2. Discovers source files (respecting .gitignore and exclusions)
+/// 3. Parses and chunks each file
+/// 4. Generates embeddings via the provider
+/// 5. Stores metadata, vectors, and BM25 index on disk
+///
+/// # Arguments
+/// - `repo_path` — Path to the repository to index
+/// - `provider` — Embedding provider (API-backed or mock)
+/// - `config` — Pipeline configuration
+///
+/// # Errors
+/// Returns an error if the path is invalid, not a directory, or storage fails.
+pub async fn index_repository<P: EmbeddingProvider>(
+    repo_path: &Path,
+    provider: &P,
+    config: &VeraConfig,
+) -> Result<IndexSummary> {
+    let start = Instant::now();
+
+    // ── 1. Validate path ─────────────────────────────────────────
+    if !repo_path.exists() {
+        bail!("path does not exist: {}", repo_path.display());
+    }
+    if !repo_path.is_dir() {
+        bail!("path is not a directory: {}", repo_path.display());
+    }
+
+    let repo_root = repo_path
+        .canonicalize()
+        .with_context(|| format!("failed to resolve path: {}", repo_path.display()))?;
+
+    info!(path = %repo_root.display(), "starting indexing");
+
+    // ── 2. Discover files ────────────────────────────────────────
+    let discovery =
+        discovery::discover_files(&repo_root, &config.indexing).context("file discovery failed")?;
+
+    if discovery.files.is_empty() {
+        return Ok(IndexSummary {
+            files_parsed: 0,
+            chunks_created: 0,
+            embeddings_generated: 0,
+            binary_skipped: discovery.binary_skipped,
+            large_skipped: discovery.large_skipped,
+            error_skipped: discovery.error_skipped,
+            parse_errors: Vec::new(),
+            elapsed_secs: start.elapsed().as_secs_f64(),
+        });
+    }
+
+    info!(
+        files = discovery.files.len(),
+        binary_skipped = discovery.binary_skipped,
+        large_skipped = discovery.large_skipped,
+        error_skipped = discovery.error_skipped,
+        "file discovery complete"
+    );
+
+    // ── 3. Parse and chunk each file ─────────────────────────────
+    let (all_chunks, parse_errors) = parse_discovered_files(&discovery, config);
+
+    info!(
+        chunks = all_chunks.len(),
+        parse_errors = parse_errors.len(),
+        "parsing complete"
+    );
+
+    if all_chunks.is_empty() {
+        return Ok(IndexSummary {
+            files_parsed: discovery.files.len() - parse_errors.len(),
+            chunks_created: 0,
+            embeddings_generated: 0,
+            binary_skipped: discovery.binary_skipped,
+            large_skipped: discovery.large_skipped,
+            error_skipped: discovery.error_skipped,
+            parse_errors,
+            elapsed_secs: start.elapsed().as_secs_f64(),
+        });
+    }
+
+    // ── 4. Generate embeddings ───────────────────────────────────
+    let embeddings = embed_chunks(provider, &all_chunks, config.embedding.batch_size)
+        .await
+        .context("embedding generation failed")?;
+
+    info!(embeddings = embeddings.len(), "embeddings generated");
+
+    // ── 5. Store everything on disk ──────────────────────────────
+    let idx_dir = index_dir(&repo_root);
+    store_index(&idx_dir, &all_chunks, &embeddings).context("failed to write index artifacts")?;
+
+    info!(index_dir = %idx_dir.display(), "index artifacts written");
+
+    let files_parsed = discovery.files.len() - parse_errors.len();
+
+    Ok(IndexSummary {
+        files_parsed,
+        chunks_created: all_chunks.len(),
+        embeddings_generated: embeddings.len(),
+        binary_skipped: discovery.binary_skipped,
+        large_skipped: discovery.large_skipped,
+        error_skipped: discovery.error_skipped,
+        parse_errors,
+        elapsed_secs: start.elapsed().as_secs_f64(),
+    })
+}
+
+// ── Internal helpers ─────────────────────────────────────────────────
+
+/// Parse all discovered files and collect chunks.
+///
+/// Files that fail parsing are recorded as errors but do not abort
+/// the pipeline (continue + report).
+fn parse_discovered_files(
+    discovery: &DiscoveryResult,
+    config: &VeraConfig,
+) -> (Vec<Chunk>, Vec<FileError>) {
+    let mut all_chunks = Vec::new();
+    let mut parse_errors = Vec::new();
+
+    for file in &discovery.files {
+        let source = match std::fs::read_to_string(&file.absolute_path) {
+            Ok(s) => s,
+            Err(err) => {
+                warn!(
+                    file = %file.relative_path,
+                    error = %err,
+                    "failed to read file for parsing"
+                );
+                parse_errors.push(FileError {
+                    file_path: file.relative_path.clone(),
+                    error: err.to_string(),
+                });
+                continue;
+            }
+        };
+
+        let ext = file
+            .absolute_path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("");
+        let language = Language::from_extension(ext);
+
+        match parsing::parse_and_chunk(&source, &file.relative_path, language, &config.indexing) {
+            Ok(chunks) => {
+                debug!(
+                    file = %file.relative_path,
+                    chunks = chunks.len(),
+                    "parsed file"
+                );
+                all_chunks.extend(chunks);
+            }
+            Err(err) => {
+                warn!(
+                    file = %file.relative_path,
+                    error = %err,
+                    "parse error"
+                );
+                parse_errors.push(FileError {
+                    file_path: file.relative_path.clone(),
+                    error: err.to_string(),
+                });
+            }
+        }
+    }
+
+    (all_chunks, parse_errors)
+}
+
+/// Write chunks, embeddings, and BM25 index to disk.
+fn store_index(idx_dir: &Path, chunks: &[Chunk], embeddings: &[(String, Vec<f32>)]) -> Result<()> {
+    // Ensure index directory exists.
+    std::fs::create_dir_all(idx_dir)
+        .with_context(|| format!("failed to create index dir: {}", idx_dir.display()))?;
+
+    // Determine vector dimensionality from the first embedding.
+    let dim = embeddings.first().map(|(_, v)| v.len()).unwrap_or(4096);
+
+    // ── Metadata store ───────────────────────────────────────────
+    let metadata_path = idx_dir.join(METADATA_DB);
+    let metadata_store =
+        MetadataStore::open(&metadata_path).context("failed to open metadata store")?;
+    // Clear previous data (fresh index).
+    metadata_store
+        .clear()
+        .context("failed to clear metadata store")?;
+    metadata_store
+        .insert_chunks(chunks)
+        .context("failed to insert chunk metadata")?;
+
+    debug!(chunks = chunks.len(), "metadata stored");
+
+    // ── Vector store ─────────────────────────────────────────────
+    let vector_path = idx_dir.join(VECTOR_DB);
+    let vector_store =
+        VectorStore::open(&vector_path, dim).context("failed to open vector store")?;
+    vector_store
+        .clear()
+        .context("failed to clear vector store")?;
+
+    let batch: Vec<(&str, &[f32])> = embeddings
+        .iter()
+        .map(|(id, vec)| (id.as_str(), vec.as_slice()))
+        .collect();
+    vector_store
+        .insert_batch(&batch)
+        .context("failed to insert vectors")?;
+
+    debug!(vectors = embeddings.len(), "vectors stored");
+
+    // ── BM25 index ───────────────────────────────────────────────
+    let bm25_dir = idx_dir.join(BM25_SUBDIR);
+    let bm25_index = Bm25Index::open(&bm25_dir).context("failed to open BM25 index")?;
+    bm25_index.clear().context("failed to clear BM25 index")?;
+
+    // Pre-compute language strings so BM25 documents can borrow them.
+    let lang_strings: Vec<String> = chunks.iter().map(|c| c.language.to_string()).collect();
+    let bm25_docs: Vec<Bm25Document<'_>> = chunks
+        .iter()
+        .zip(lang_strings.iter())
+        .map(|(c, lang)| Bm25Document {
+            chunk_id: &c.id,
+            file_path: &c.file_path,
+            content: &c.content,
+            symbol_name: c.symbol_name.as_deref(),
+            language: lang,
+        })
+        .collect();
+    bm25_index
+        .insert_batch(&bm25_docs)
+        .context("failed to insert BM25 documents")?;
+
+    debug!(docs = bm25_docs.len(), "BM25 index built");
+
+    Ok(())
+}
+
+#[cfg(test)]
+#[path = "pipeline_tests.rs"]
+mod tests;
