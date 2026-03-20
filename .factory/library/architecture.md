@@ -119,6 +119,38 @@ Key insights from competitor baseline benchmarking (21 tasks, 4 repos):
 - Hybrid p95 latency: 6749ms (dominated by external API round trips)
 - 175K LOC indexed in 59.2s, 1.38× size ratio
 
+## M3 Agent Integration Details
+
+### Chunk ID Format Convention
+- Chunk IDs follow the format `{file_path}:{index}` (e.g., `src/main.rs:0`, `src/main.rs:1`)
+- The `file_path` is repo-relative; `index` is a 0-based counter per file
+- This convention is critical for `VectorStore.delete_by_file_prefix` which uses `{file_path}:` as a LIKE prefix
+- Changing this format would break incremental indexing's prefix-based deletion
+
+### sqlite-vec vec0 Upsert Limitation
+- The vec0 virtual table does NOT support INSERT OR REPLACE or ON CONFLICT
+- Workaround: DELETE existing vector first, then INSERT new one
+- This is why incremental indexing uses `delete_by_file_prefix` before re-inserting updated chunks
+- See `crates/vera-core/src/storage/vector.rs` comments at batch_insert for details
+
+### MCP Server Transport
+- MCP server uses stdio transport (JSON-RPC 2.0 over stdin/stdout), NOT TCP/HTTP
+- No port is used; the server reads from stdin and writes to stdout
+- Launched by MCP clients (Claude Desktop, VS Code) — not by direct HTTP connection
+- `vera mcp` starts the server; no `--port` flag exists
+
+### JSON Serialization Conventions
+- `Language` enum serializes as **lowercase**: `rust`, `python`, `typescript`, `go`, etc. (via `#[serde(rename_all = "lowercase")]`)
+- `SymbolType` enum serializes as **snake_case**: `function`, `class`, `struct`, `type_alias`, etc. (via `#[serde(rename_all = "snake_case")]`)
+- `SearchResult` always includes all 8 fields: `file_path`, `line_start`, `line_end`, `content`, `language`, `score`, `symbol_name`, `symbol_type`
+- `symbol_name` and `symbol_type` are `null` (not omitted) when no symbol is detected
+
+### CLI/MCP Search Duplication
+- The search logic is implemented in two places: `crates/vera-cli/src/commands/search.rs` and `crates/vera-mcp/src/tools.rs`
+- Both implement BM25 fallback, embedding provider setup, reranker creation, and filter application
+- When modifying search behavior, both locations must be updated to maintain equivalence
+- Future refactoring target: extract shared search service into `vera-core`
+
 ## Key Constraints
 
 - Files under 300 lines (soft), 500 lines (hard - must explain)

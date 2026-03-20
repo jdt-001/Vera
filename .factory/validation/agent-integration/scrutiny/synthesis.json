@@ -1,0 +1,102 @@
+{
+  "milestone": "agent-integration",
+  "round": 1,
+  "status": "pass",
+  "validatorsRun": {
+    "test": { "passed": true, "command": "cargo test", "exitCode": 0 },
+    "typecheck": { "passed": true, "command": "cargo clippy -- -D warnings", "exitCode": 0 },
+    "lint": { "passed": true, "command": "cargo fmt --check", "exitCode": 0 }
+  },
+  "reviewsSummary": {
+    "total": 5,
+    "passed": 5,
+    "failed": 0,
+    "failedFeatures": []
+  },
+  "blockingIssues": [],
+  "appliedUpdates": [
+    {
+      "target": "services.yaml",
+      "description": "Fixed stale MCP service entry: replaced incorrect TCP/HTTP config (--port 3200, curl healthcheck) with accurate stdio transport documentation. MCP server uses JSON-RPC over stdin/stdout, not TCP.",
+      "sourceFeature": "mcp-server"
+    },
+    {
+      "target": "library",
+      "description": "Added chunk ID format convention (file_path:index) to architecture.md — critical for understanding incremental indexing's prefix-based deletion.",
+      "sourceFeature": "incremental-indexing"
+    },
+    {
+      "target": "library",
+      "description": "Added sqlite-vec vec0 upsert limitation to architecture.md — vec0 does NOT support INSERT OR REPLACE; must DELETE then INSERT.",
+      "sourceFeature": "incremental-indexing"
+    },
+    {
+      "target": "library",
+      "description": "Added MCP server transport details to architecture.md — stdio transport, no port, no HTTP.",
+      "sourceFeature": "mcp-server"
+    },
+    {
+      "target": "library",
+      "description": "Added JSON serialization conventions to architecture.md — Language lowercase, SymbolType snake_case, SearchResult always 8 fields with null (not omitted) for absent symbols.",
+      "sourceFeature": "context-capsules"
+    },
+    {
+      "target": "library",
+      "description": "Added CLI/MCP search duplication notice to architecture.md — both locations must be updated when modifying search behavior.",
+      "sourceFeature": "mcp-server"
+    }
+  ],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Add convention: prefer returning Result/Err from command handler functions rather than calling process::exit() directly. Main() should be the only place that converts errors to exit codes. This improves testability and gives callers control over error handling.",
+      "evidence": "14+ call sites across config.rs, search.rs, index.rs, update.rs, stats.rs use process::exit(1) instead of returning Err. Identified by cli-completeness reviewer.",
+      "isSystemic": true
+    },
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Formalize the error message format convention: 'Error: <problem description>\\nHint: <actionable suggestion>'. All CLI commands already follow this pattern consistently.",
+      "evidence": "All 5 command modules (config.rs, index.rs, search.rs, update.rs, stats.rs) use this exact pattern. Identified by cli-completeness reviewer.",
+      "isSystemic": true
+    },
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Add file size budget exemption or higher threshold for test files. Comprehensive test files (e.g., search_quality_tests.rs at 1238 lines) are collections of independent test functions and have different size tradeoffs than production code. Suggest: test files exempt from 500-line hard limit, or separate 1000-line threshold for test files.",
+      "evidence": "search_quality_tests.rs (1238 lines) and types.rs (655 lines) both exceed 500-line hard limit. types.rs includes 300+ lines of tests. Both pre-date context-capsules feature. Multiple workers noted this in discoveredIssues. AGENTS.md exemptions only cover spikes/ and benchmarks/scripts/.",
+      "isSystemic": true
+    },
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Add convention: when committing files that exceed the 500-line hard limit, the commit message MUST include a brief explanation (as currently stated in AGENTS.md). Enforce during review.",
+      "evidence": "Multiple commits across M2 and M3 introduced files over 500 lines without commit message explanations. context-capsules reviewer flagged commit 2c8cf42 specifically.",
+      "isSystemic": true
+    },
+    {
+      "target": "skills",
+      "suggestion": "Add a documentation/non-code exception to the implementation-worker skill's Step 2 (Write Failing Tests First). For documentation-only features (SKILL.md, README, ADRs), TDD does not apply. The skill should say: 'Skip this step for documentation-only features.'",
+      "evidence": "skill-and-integration worker correctly deviated from Step 2 for SKILL.md (a documentation file). Worker's skillFeedback notes: 'This feature is a documentation file (SKILL.md), not Rust code. Test-driven development doesn't apply.'",
+      "isSystemic": false
+    },
+    {
+      "target": "skills",
+      "suggestion": "Add guidance to the implementation-worker skill: when creating MCP tools, check whether the search/index/update logic should be shared with the CLI via a service layer in vera-core, rather than duplicating logic across crates.",
+      "evidence": "MCP tools.rs reimplements hybrid search logic from CLI search.rs (BM25 fallback, embedding provider, reranker setup, filter application). Both are ~100 lines of nearly identical code. If one is updated without the other, behavior diverges.",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "main.rs approaching 500-line limit (479 lines)",
+      "reason": "Duplicate of file-size observation already covered. Also, 479 < 500, so it's within the hard limit. The soft target (300 lines) is a recommendation, not a violation."
+    },
+    {
+      "observation": "Worker suggested .vera directory should be in default exclusions (implementation-worker skill)",
+      "reason": "Already handled in code — .vera is excluded during file discovery. The suggestion was for the skill to mention it, but this is better captured as library knowledge (already documented in architecture.md under 'Index Storage Convention') rather than a skill change."
+    },
+    {
+      "observation": "Feature description for MCP said port 3200 but worker implemented stdio instead",
+      "reason": "Stdio is the correct MCP standard transport. The feature description was aspirational; the worker made the right design choice. services.yaml has been corrected. No guidance change needed."
+    }
+  ],
+  "previousRound": null
+}

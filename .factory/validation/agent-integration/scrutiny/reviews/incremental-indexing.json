@@ -1,0 +1,67 @@
+{
+  "featureId": "incremental-indexing",
+  "reviewedAt": "2026-03-20T19:15:00.000Z",
+  "commitId": "96827fabc1a244af85b92f19ace65eacde2989af",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Solid implementation of incremental indexing with SHA-256 content hash change detection. The critical VectorStore AUTOINCREMENT orphan bug is properly fixed using INSERT OR IGNORE + DELETE + INSERT pattern. All 3 operations (modify, add, delete) are correctly handled with proper cleanup of all stores (metadata, vectors, BM25). 14 new tests provide good coverage including a consistency test that verifies update state matches fresh index. A few non-blocking issues identified around code duplication, LIKE escaping, and atomicity.",
+    "issues": [
+      {
+        "file": "crates/vera-core/src/storage/vector.rs",
+        "line": 289,
+        "severity": "non_blocking",
+        "description": "SQL LIKE pattern in delete_by_file_prefix does not escape special characters. The `_` wildcard in LIKE matches any single character, so file paths containing underscores (e.g., `my_module/my_file.rs`) could match unintended entries (e.g., `my_module/myXfile.rs`). Similarly, `%` in file paths would cause incorrect matches. Fix: use `ESCAPE` clause and escape `_` and `%` in the prefix, e.g., `WHERE chunk_id LIKE ?1 ESCAPE '\\'` with the prefix having `_` → `\\_` and `%` → `\\%`."
+      },
+      {
+        "file": "crates/vera-core/src/indexing/update.rs",
+        "line": 355,
+        "severity": "non_blocking",
+        "description": "The `truncate_embeddings` function is duplicated verbatim between update.rs (line 355) and pipeline.rs (line 286). This should be extracted to a shared location (e.g., a utility module in the embedding or indexing module) to avoid drift. Both copies are currently identical."
+      },
+      {
+        "file": "crates/vera-core/src/indexing/update.rs",
+        "line": 155,
+        "severity": "non_blocking",
+        "description": "VectorStore and Bm25Index are opened up to 3 separate times in a single update (once for deletions at line 155, once for modification removal at line 177, once for insertion at line 230+). These should be opened once and reused throughout the function. This wastes file descriptors and connection setup overhead."
+      },
+      {
+        "file": "crates/vera-core/src/indexing/update.rs",
+        "line": 148,
+        "severity": "non_blocking",
+        "description": "No overall transaction wrapping the update operation. If the embedding API call fails (line 224) after old chunks have been deleted for modified files (line 183), the index is left in an inconsistent state — old data removed but new data not yet inserted. Consider wrapping the per-file remove+re-index sequence in a broader error recovery strategy, or at minimum documenting this limitation."
+      },
+      {
+        "file": "crates/vera-core/src/indexing/update.rs",
+        "line": 120,
+        "severity": "non_blocking",
+        "description": "File contents are cloned via `.clone()` when building the modified/added vectors (lines 120, 127). For large files, this doubles memory usage. The content is already in `current_files` HashMap — consider restructuring to avoid the clone by using references or consuming the HashMap."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "Worker noted main.rs was 554 lines (over 500-line hard limit) in discoveredIssues, but actual file is 479 lines after this commit. The handoff's line count claim is inaccurate. Regardless, the file size is growing and approaching the 500-line hard limit — the worker's suggestion to split into command modules is sound and should be tracked.",
+      "evidence": "wc -l crates/vera-cli/src/main.rs = 479 lines. Handoff claims 645 lines. The 500-line hard limit is documented in AGENTS.md."
+    },
+    {
+      "area": "skills",
+      "observation": "Worker suggested that the implementation-worker skill should mention that .vera directory should be in default exclusions to prevent indexing own artifacts. This was a non-obvious bug that caused test failures. The skill does not currently mention index artifact exclusions.",
+      "evidence": "Handoff skillFeedback.suggestedChanges: 'The skill could mention that .vera directory should be in default exclusions to prevent indexing own artifacts — this was a non-obvious bug that caused test failures until discovered'. Worker followed procedure otherwise (followedProcedure: true)."
+    },
+    {
+      "area": "knowledge",
+      "observation": "The architecture.md library file was updated with index storage convention mentioning .vera/ directory, but does not document the chunk ID format (file_path:index) which is critical for the delete_by_file_prefix pattern used in incremental indexing. If this convention changes, the prefix-based deletion would silently break.",
+      "evidence": "VectorStore.delete_by_file_prefix uses `{file_path}:` as prefix pattern (update.rs:303). This depends on chunk IDs following the `filepath:N` format, which is not documented in architecture.md or AGENTS.md."
+    },
+    {
+      "area": "knowledge",
+      "observation": "The vec0 virtual table limitation (no INSERT OR REPLACE / upsert support) is now documented in code comments but not in the architecture.md library. This is a critical constraint that any future worker modifying vector storage needs to know.",
+      "evidence": "vector.rs comments at lines 87-92 and 136-139 document this. architecture.md section 'ADR-002: Storage Backend' mentions sqlite-vec but not the vec0 upsert limitation."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "PASS. The incremental indexing implementation is well-structured and correctly addresses all expected behaviors: content hash change detection (SHA-256), modified file re-indexing, new file addition, deleted file removal, and index consistency matching a fresh vera index. The critical VectorStore AUTOINCREMENT orphan bug is properly fixed. 14 new tests provide comprehensive coverage including an important consistency test. Five non-blocking issues identified: (1) LIKE pattern not escaped for special characters in file paths, (2) duplicated truncate_embeddings function, (3) redundant VectorStore/BM25 opens, (4) no overall transaction for atomicity, (5) unnecessary content cloning. None are blocking — the implementation is correct and well-tested for realistic use cases."
+}

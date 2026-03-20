@@ -1,0 +1,50 @@
+{
+  "featureId": "skill-and-integration",
+  "reviewedAt": "2026-03-20T20:15:00.000Z",
+  "commitId": "ade30e4",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "SKILL.md is well-structured with all 5 required sections (Purpose, When to Use, Commands, Output Interpretation, Query Tips), at ~1000 tokens (well under the 2000 token budget). All documented CLI commands and flags match the actual clap definitions in main.rs. The end-to-end workflow (index → search → update → search reflects changes → delete → update → deleted content gone) was thoroughly verified in the worker transcript. MCP/CLI equivalence was verified for 3 queries with identical rankings. One documentation inaccuracy found in the output example: language values are shown in PascalCase but actually serialize as lowercase.",
+    "issues": [
+      {
+        "file": "SKILL.md",
+        "line": 67,
+        "severity": "non_blocking",
+        "description": "Output example shows `\"language\": \"Rust\"` (PascalCase) but the Language enum uses `#[serde(rename_all = \"lowercase\")]` (crates/vera-core/src/types.rs:152), so actual JSON output is `\"language\": \"rust\"` (lowercase). An agent doing case-sensitive string comparison on language values would get unexpected results. Should be corrected to `\"rust\"`."
+      },
+      {
+        "file": "SKILL.md",
+        "line": 55,
+        "severity": "non_blocking",
+        "description": "The `config` command (vera config, vera config get/set) is not documented in SKILL.md. While not strictly required by the feature spec, it's a functional CLI command that agents may find useful for tuning search behavior (e.g., adjusting default_limit, reranking_enabled)."
+      },
+      {
+        "file": "SKILL.md",
+        "line": 30,
+        "severity": "non_blocking",
+        "description": "Only EMBEDDING_MODEL_* env vars are mentioned as requirements. The RERANKER_MODEL_* env vars are not mentioned. While search degrades gracefully without reranking, agents should know about optimal configuration. A brief note like 'Optionally set RERANKER_MODEL_* variables for improved precision' would help."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "services",
+      "observation": "services.yaml defines MCP start command as `VERA_LOG=info cargo run -- mcp --port 3200`, but the CLI `Mcp` subcommand (main.rs:58) accepts no arguments — there is no `--port` flag. The `--port 3200` argument would cause a clap parse error. SKILL.md correctly documents `vera mcp` without port, but services.yaml is stale/incorrect.",
+      "evidence": "services.yaml line 'start: VERA_LOG=info cargo run -- mcp --port 3200' vs main.rs Commands::Mcp variant which has no fields. MCP server.rs uses stdio (BufRead/Write), not a TCP port."
+    },
+    {
+      "area": "skills",
+      "observation": "Worker correctly deviated from the implementation-worker skill's Step 2 (Write Failing Tests First) for this documentation-only feature. The skill doesn't account for non-code features. Worker's skillFeedback suggests adding a documentation exception to the TDD cycle.",
+      "evidence": "Handoff skillFeedback.deviations[0]: 'This feature is a documentation file (SKILL.md), not Rust code. Test-driven development doesn't apply.' Skill SKILL.md Step 2 says 'Write tests that describe the expected behavior' with no exception for documentation features."
+    },
+    {
+      "area": "conventions",
+      "observation": "The Language enum serializes with lowercase via #[serde(rename_all = \"lowercase\")] and SymbolType with snake_case via #[serde(rename_all = \"snake_case\")], but this serialization convention is not documented anywhere in AGENTS.md or the library. This caused SKILL.md to use incorrect casing in the example output ('Rust' vs 'rust'). Documenting JSON serialization conventions would prevent future documentation errors.",
+      "evidence": "crates/vera-core/src/types.rs:152 — #[serde(rename_all = \"lowercase\")] on Language enum; types.rs:236 — #[serde(rename_all = \"snake_case\")] on SymbolType enum. SKILL.md line 67 shows 'Rust' instead of 'rust'."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "SKILL.md passes review. It contains all 5 required sections, is well within the 2000-token budget (~1000 tokens), and all documented commands match the actual CLI interface. The worker thoroughly verified the end-to-end workflow (index → search → modify → update → search → delete → update → verify deletion) and MCP/CLI equivalence for 3 queries. Three non-blocking issues found: (1) the JSON output example uses PascalCase 'Rust' for language but actual serialization is lowercase 'rust', (2) the config command is undocumented, and (3) reranker env vars are not mentioned. One shared state issue: services.yaml has a stale MCP start command with a non-existent --port flag."
+}

@@ -14,9 +14,7 @@ commands:
   eval-setup-corpus: bash eval/setup-corpus.sh
 
 services:
-  mcp:
-    start: VERA_LOG=info cargo run -- mcp --port 3200
-    stop: lsof -ti :3200 | xargs kill 2>/dev/null || true
-    healthcheck: curl -sf http://localhost:3200/health 2>/dev/null || echo "MCP not running"
-    port: 3200
-    depends_on: []
+  # MCP server uses stdio transport (JSON-RPC over stdin/stdout), not TCP.
+  # It is typically launched by an MCP client (e.g., Claude Desktop, VS Code).
+  # No port, no HTTP endpoint, no health check applicable.
+  # To test manually: echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"0.1.0"}}}' | cargo run -- mcp
