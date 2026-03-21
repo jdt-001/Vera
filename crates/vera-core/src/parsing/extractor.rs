@@ -303,6 +303,27 @@ pub fn extract_name(node: &tree_sitter::Node<'_>, source: &[u8]) -> Option<Strin
             return name_from_node(&child, source);
         }
     }
+
+    // Protobuf names
+    if node.kind() == "message"
+        || node.kind() == "enum"
+        || node.kind() == "service"
+        || node.kind() == "rpc"
+        || node.kind().ends_with("_definition")
+    {
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind().ends_with("_name") {
+                let mut inner = child.walk();
+                for c in child.children(&mut inner) {
+                    if c.kind() == "identifier" {
+                        return c.utf8_text(source).ok().map(|s| s.to_string());
+                    }
+                }
+                return child.utf8_text(source).ok().map(|s| s.to_string());
+            }
+        }
+    }
     // Dart: method_signature -> function_signature -> name
     if node.kind() == "method_signature" {
         let mut cursor = node.walk();
@@ -537,6 +558,65 @@ fn collect_symbols(
                 || kind == "interface_declaration")
         {
             extract_general_class_methods(node, source, lang, symbols, sym_type);
+            return;
+        }
+
+        // For Protobuf services, extract rpc methods:
+        if lang == Language::Protobuf && (kind == "service" || kind == "service_definition") {
+            let name = extract_name(&node, source);
+            symbols.push(RawSymbol {
+                name,
+                symbol_type: sym_type,
+                start_byte: node.start_byte(),
+                end_byte: node.end_byte(),
+                start_row: node.start_position().row,
+                end_row: node.end_position().row,
+            });
+
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                // Sometime tree-sitter has a body node containing rpcs
+                if child.kind() == "service_body" || child.kind() == "block" {
+                    let mut inner_cursor = child.walk();
+                    for inner_child in child.children(&mut inner_cursor) {
+                        if inner_child.kind() == "rpc"
+                            || inner_child.kind() == "rpc_definition"
+                            || inner_child.kind() == "rpc_declaration"
+                        {
+                            if let Some(rpc_type) = classify_node(lang, inner_child.kind()) {
+                                let end_byte = inner_child.end_byte();
+                                let end_row = inner_child.end_position().row;
+                                let rpc_name = extract_name(&inner_child, source);
+                                symbols.push(RawSymbol {
+                                    name: rpc_name,
+                                    symbol_type: rpc_type,
+                                    start_byte: inner_child.start_byte(),
+                                    end_byte,
+                                    start_row: inner_child.start_position().row,
+                                    end_row,
+                                });
+                            }
+                        }
+                    }
+                } else if child.kind() == "rpc"
+                    || child.kind() == "rpc_definition"
+                    || child.kind() == "rpc_declaration"
+                {
+                    if let Some(rpc_type) = classify_node(lang, child.kind()) {
+                        let end_byte = child.end_byte();
+                        let end_row = child.end_position().row;
+                        let rpc_name = extract_name(&child, source);
+                        symbols.push(RawSymbol {
+                            name: rpc_name,
+                            symbol_type: rpc_type,
+                            start_byte: child.start_byte(),
+                            end_byte,
+                            start_row: child.start_position().row,
+                            end_row,
+                        });
+                    }
+                }
+            }
             return;
         }
 
@@ -1507,6 +1587,7 @@ CREATE PROCEDURE my_proc() LANGUAGE SQL AS $$ $$;
     #[test]
     fn protobuf_extracts_types() {
         let source = r#"
+syntax = "proto3";
 message User { int32 id = 1; }
 enum Status { ACTIVE = 0; }
 service AuthService { rpc Login(User) returns (User); }
@@ -1514,5 +1595,23 @@ service AuthService { rpc Login(User) returns (User); }
         let symbols = parse_and_extract(source, Language::Protobuf);
         println!("Protobuf symbols: {:#?}", symbols);
         assert!(!symbols.is_empty());
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.symbol_type == SymbolType::Struct && s.name.as_deref() == Some("User"))
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.symbol_type == SymbolType::Enum && s.name.as_deref() == Some("Status"))
+        );
+        assert!(symbols.iter().any(
+            |s| s.symbol_type == SymbolType::Class && s.name.as_deref() == Some("AuthService")
+        ));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.symbol_type == SymbolType::Method && s.name.as_deref() == Some("Login"))
+        );
     }
 }
