@@ -7,31 +7,44 @@ use tree_sitter::Language as TsLanguage;
 
 use crate::types::Language;
 
+extern crate tree_sitter_hcl;
+
+unsafe extern "C" {
+    fn tree_sitter_sql() -> *const ();
+    fn tree_sitter_hcl() -> *const ();
+    fn tree_sitter_proto() -> *const ();
+}
+
 /// Returns the tree-sitter grammar for a given language, if supported.
 ///
 /// Returns `None` for languages without tree-sitter support (Tier 0 fallback).
 pub fn tree_sitter_grammar(lang: Language) -> Option<TsLanguage> {
     let lang_fn = match lang {
-        Language::Rust => tree_sitter_rust::LANGUAGE,
-        Language::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT,
-        Language::JavaScript => tree_sitter_javascript::LANGUAGE,
-        Language::Python => tree_sitter_python::LANGUAGE,
-        Language::Go => tree_sitter_go::LANGUAGE,
-        Language::Java => tree_sitter_java::LANGUAGE,
-        Language::C => tree_sitter_c::LANGUAGE,
-        Language::Cpp => tree_sitter_cpp::LANGUAGE,
-        Language::Ruby => tree_sitter_ruby::LANGUAGE,
-        Language::Bash => tree_sitter_bash::LANGUAGE,
-        Language::Kotlin => tree_sitter_kotlin_sg::LANGUAGE,
-        Language::Swift => tree_sitter_swift::LANGUAGE,
-        Language::Zig => tree_sitter_zig::LANGUAGE,
-        Language::Lua => tree_sitter_lua::LANGUAGE,
-        Language::Scala => tree_sitter_scala::LANGUAGE,
-        Language::CSharp => tree_sitter_c_sharp::LANGUAGE,
-        Language::Php => tree_sitter_php::LANGUAGE_PHP,
-        Language::Haskell => tree_sitter_haskell::LANGUAGE,
-        Language::Elixir => tree_sitter_elixir::LANGUAGE,
-        Language::Dart => tree_sitter_dart::LANGUAGE,
+        Language::Rust => tree_sitter_rust::LANGUAGE.into(),
+        Language::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+        Language::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+        Language::Python => tree_sitter_python::LANGUAGE.into(),
+        Language::Go => tree_sitter_go::LANGUAGE.into(),
+        Language::Java => tree_sitter_java::LANGUAGE.into(),
+        Language::C => tree_sitter_c::LANGUAGE.into(),
+        Language::Cpp => tree_sitter_cpp::LANGUAGE.into(),
+        Language::Ruby => tree_sitter_ruby::LANGUAGE.into(),
+        Language::Bash => tree_sitter_bash::LANGUAGE.into(),
+        Language::Kotlin => tree_sitter_kotlin_sg::LANGUAGE.into(),
+        Language::Swift => tree_sitter_swift::LANGUAGE.into(),
+        Language::Zig => tree_sitter_zig::LANGUAGE.into(),
+        Language::Lua => tree_sitter_lua::LANGUAGE.into(),
+        Language::Scala => tree_sitter_scala::LANGUAGE.into(),
+        Language::CSharp => tree_sitter_c_sharp::LANGUAGE.into(),
+        Language::Php => tree_sitter_php::LANGUAGE_PHP.into(),
+        Language::Haskell => tree_sitter_haskell::LANGUAGE.into(),
+        Language::Elixir => tree_sitter_elixir::LANGUAGE.into(),
+        Language::Dart => tree_sitter_dart::LANGUAGE.into(),
+        Language::Sql => unsafe { std::mem::transmute::<*const (), TsLanguage>(tree_sitter_sql()) },
+        Language::Hcl => unsafe { std::mem::transmute::<*const (), TsLanguage>(tree_sitter_hcl()) },
+        Language::Protobuf => unsafe {
+            std::mem::transmute::<*const (), TsLanguage>(tree_sitter_proto())
+        },
         // Languages without tree-sitter grammar support → Tier 0 fallback
         Language::Toml
         | Language::Yaml
@@ -39,7 +52,7 @@ pub fn tree_sitter_grammar(lang: Language) -> Option<TsLanguage> {
         | Language::Markdown
         | Language::Unknown => return None,
     };
-    Some(lang_fn.into())
+    Some(lang_fn)
 }
 
 /// Returns whether a language has tree-sitter grammar support (Tier 1A).
@@ -74,6 +87,9 @@ mod tests {
             Language::Haskell,
             Language::Elixir,
             Language::Dart,
+            Language::Sql,
+            Language::Hcl,
+            Language::Protobuf,
         ];
         for lang in tier_1a {
             assert!(

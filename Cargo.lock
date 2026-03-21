@@ -2549,6 +2549,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tree-sitter-hcl"
+version = "1.2.0"
+source = "git+https://github.com/tree-sitter-grammars/tree-sitter-hcl#64ad62785d442eb4d45df3a1764962dafd5bc98b"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
 name = "tree-sitter-java"
 version = "0.23.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2779,6 +2788,7 @@ name = "vera-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "cc",
  "futures",
  "ignore",
  "rayon",
@@ -2802,6 +2812,7 @@ dependencies = [
  "tree-sitter-elixir",
  "tree-sitter-go",
  "tree-sitter-haskell",
+ "tree-sitter-hcl",
  "tree-sitter-java",
  "tree-sitter-javascript",
  "tree-sitter-kotlin-sg",

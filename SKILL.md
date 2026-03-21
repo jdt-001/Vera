@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Vera is a code indexing and retrieval tool built for AI coding agents. It combines BM25 keyword search with vector similarity search (Reciprocal Rank Fusion) and cross-encoder reranking to find relevant code across a codebase. It parses 20+ languages with tree-sitter, chunks at symbol boundaries, and returns structured JSON context capsules with file paths, line ranges, and code content.
+Vera is a code indexing and retrieval tool built for AI coding agents. It combines BM25 keyword search with vector similarity search (Reciprocal Rank Fusion) and cross-encoder reranking to find relevant code across a codebase. It parses 21+ languages with tree-sitter, chunks at symbol boundaries, and returns structured JSON context capsules with file paths, line ranges, and code content.
 
 ## When to Use
 
