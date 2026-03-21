@@ -14,6 +14,9 @@ pub use provider::{
     OpenAiProvider, embed_chunks, embed_chunks_concurrent,
 };
 
+pub mod dynamic;
+pub use dynamic::{DynamicProvider, create_dynamic_provider};
+
 #[cfg(feature = "local")]
 pub mod local_provider;
 

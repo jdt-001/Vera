@@ -72,6 +72,16 @@ impl MetadataStore {
             )
             .context("failed to create file_hashes table")?;
 
+        // Index metadata (model name, dimensions, etc.)
+        self.conn
+            .execute_batch(
+                "CREATE TABLE IF NOT EXISTS index_metadata (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                );",
+            )
+            .context("failed to create index_metadata table")?;
+
         Ok(())
     }
 
@@ -179,9 +189,36 @@ impl MetadataStore {
     /// Clear all data from the store.
     pub fn clear(&self) -> Result<()> {
         self.conn
-            .execute_batch("DELETE FROM chunks; DELETE FROM file_hashes;")
+            .execute_batch(
+                "DELETE FROM chunks; DELETE FROM file_hashes; DELETE FROM index_metadata;",
+            )
             .context("failed to clear metadata store")?;
         Ok(())
+    }
+
+    /// Store a key-value pair in index_metadata.
+    pub fn set_index_meta(&self, key: &str, value: &str) -> Result<()> {
+        self.conn
+            .execute(
+                "INSERT OR REPLACE INTO index_metadata (key, value) VALUES (?1, ?2)",
+                params![key, value],
+            )
+            .context("failed to set index metadata")?;
+        Ok(())
+    }
+
+    /// Retrieve a key's value from index_metadata.
+    pub fn get_index_meta(&self, key: &str) -> Result<Option<String>> {
+        let result: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT value FROM index_metadata WHERE key = ?1",
+                params![key],
+                |row| row.get(0),
+            )
+            .optional()
+            .context("failed to get index metadata")?;
+        Ok(result)
     }
 
     /// Store a file content hash for incremental indexing.

@@ -2,7 +2,7 @@
 
 use anyhow::bail;
 
-use crate::helpers::output_results;
+use crate::helpers::{is_local_mode, output_results};
 
 /// Run the `vera search <query>` command.
 ///
@@ -15,6 +15,7 @@ pub fn run(
     limit: Option<usize>,
     filters: &vera_core::types::SearchFilters,
     json_output: bool,
+    local_flag: bool,
 ) -> anyhow::Result<()> {
     let config = vera_core::config::VeraConfig::default();
     let result_limit = limit.unwrap_or(config.retrieval.default_limit);
@@ -31,6 +32,8 @@ pub fn run(
         );
     }
 
+    let is_local = is_local_mode(local_flag);
+
     // Use the shared search service (handles hybrid/BM25 fallback internally).
     let results = vera_core::retrieval::search_service::execute_search(
         &index_dir,
@@ -38,6 +41,7 @@ pub fn run(
         &config,
         filters,
         result_limit,
+        is_local,
     )?;
 
     output_results(&results, json_output);

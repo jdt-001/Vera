@@ -4,10 +4,10 @@ use std::path::Path;
 
 use anyhow::{Context, bail};
 
-use crate::helpers::{create_embedding_provider, print_human_summary};
+use crate::helpers::{is_local_mode, print_human_summary};
 
 /// Run the `vera index <path>` command.
-pub fn run(path: &str, json_output: bool) -> anyhow::Result<()> {
+pub fn run(path: &str, json_output: bool, local_flag: bool) -> anyhow::Result<()> {
     let repo_path = Path::new(path);
 
     // Validate path early — before requiring API credentials.
@@ -24,19 +24,26 @@ pub fn run(path: &str, json_output: bool) -> anyhow::Result<()> {
         );
     }
 
+    let is_local = is_local_mode(local_flag);
+
     // Build the tokio runtime for async embedding calls.
     let rt = tokio::runtime::Runtime::new()
         .map_err(|e| anyhow::anyhow!("failed to create async runtime: {e}"))?;
 
     let config = vera_core::config::VeraConfig::default();
 
-    // Create the embedding provider from environment.
-    let provider = create_embedding_provider(&config)?;
+    // Create the embedding provider from environment or local model.
+    let (provider, model_name) = rt.block_on(vera_core::embedding::create_dynamic_provider(
+        &config, is_local,
+    ))?;
 
     // Run the indexing pipeline.
     let summary = rt
         .block_on(vera_core::indexing::index_repository(
-            repo_path, &provider, &config,
+            repo_path,
+            &provider,
+            &config,
+            &model_name,
         ))
         .context("indexing failed")?;
 

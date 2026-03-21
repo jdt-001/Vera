@@ -66,6 +66,7 @@ pub async fn update_repository<P: EmbeddingProvider>(
     repo_path: &Path,
     provider: &P,
     config: &VeraConfig,
+    model_name: &str,
 ) -> Result<UpdateSummary> {
     let start = Instant::now();
 
@@ -99,6 +100,23 @@ pub async fn update_repository<P: EmbeddingProvider>(
     let metadata_path = idx_dir.join("metadata.db");
     let metadata_store =
         MetadataStore::open(&metadata_path).context("failed to open metadata store")?;
+
+    // Check for provider mismatch.
+    if let (Some(s_model), Some(s_dim)) = (
+        metadata_store.get_index_meta("model_name").unwrap_or(None),
+        metadata_store
+            .get_index_meta("embedding_dim")
+            .unwrap_or(None),
+    ) {
+        if s_model != model_name {
+            bail!(
+                "Index was created with model '{}' ({} dimensions), but you are using model '{}'. Please re-index with matching provider.",
+                s_model,
+                s_dim,
+                model_name
+            );
+        }
+    }
 
     let stored_files: HashSet<String> = metadata_store
         .indexed_files()

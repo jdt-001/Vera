@@ -28,7 +28,7 @@ async fn index_simple_repo() {
 
     let provider = MockProvider::new(8);
     let config = default_config();
-    let summary = index_repository(dir.path(), &provider, &config)
+    let summary = index_repository(dir.path(), &provider, &config, "mock-model")
         .await
         .unwrap();
 
@@ -50,7 +50,13 @@ async fn index_simple_repo() {
 async fn index_invalid_path() {
     let provider = MockProvider::new(8);
     let config = default_config();
-    let result = index_repository(Path::new("/nonexistent/path/xyz"), &provider, &config).await;
+    let result = index_repository(
+        Path::new("/nonexistent/path/xyz"),
+        &provider,
+        &config,
+        "mock-model",
+    )
+    .await;
 
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
@@ -68,7 +74,7 @@ async fn index_file_not_directory() {
 
     let provider = MockProvider::new(8);
     let config = default_config();
-    let result = index_repository(&file, &provider, &config).await;
+    let result = index_repository(&file, &provider, &config, "mock-model").await;
 
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
@@ -84,7 +90,7 @@ async fn index_empty_repo() {
 
     let provider = MockProvider::new(8);
     let config = default_config();
-    let summary = index_repository(dir.path(), &provider, &config)
+    let summary = index_repository(dir.path(), &provider, &config, "mock-model")
         .await
         .unwrap();
 
@@ -103,7 +109,7 @@ async fn index_skips_binary_files() {
 
     let provider = MockProvider::new(8);
     let config = default_config();
-    let summary = index_repository(dir.path(), &provider, &config)
+    let summary = index_repository(dir.path(), &provider, &config, "mock-model")
         .await
         .unwrap();
 
@@ -122,7 +128,7 @@ async fn index_stores_correct_metadata() {
 
     let provider = MockProvider::new(8);
     let config = default_config();
-    let summary = index_repository(dir.path(), &provider, &config)
+    let summary = index_repository(dir.path(), &provider, &config, "mock-model")
         .await
         .unwrap();
 
@@ -149,7 +155,7 @@ async fn index_stores_bm25_index() {
 
     let provider = MockProvider::new(8);
     let config = default_config();
-    let _summary = index_repository(dir.path(), &provider, &config)
+    let _summary = index_repository(dir.path(), &provider, &config, "mock-model")
         .await
         .unwrap();
 
@@ -170,7 +176,7 @@ async fn index_summary_reports_parse_errors() {
 
     let provider = MockProvider::new(8);
     let config = default_config();
-    let summary = index_repository(dir.path(), &provider, &config)
+    let summary = index_repository(dir.path(), &provider, &config, "mock-model")
         .await
         .unwrap();
 
@@ -193,7 +199,7 @@ async fn index_handles_mixed_languages() {
 
     let provider = MockProvider::new(8);
     let config = default_config();
-    let summary = index_repository(dir.path(), &provider, &config)
+    let summary = index_repository(dir.path(), &provider, &config, "mock-model")
         .await
         .unwrap();
 
@@ -218,7 +224,7 @@ async fn index_permission_error_continues() {
 
     let provider = MockProvider::new(8);
     let config = default_config();
-    let summary = index_repository(dir.path(), &provider, &config)
+    let summary = index_repository(dir.path(), &provider, &config, "mock-model")
         .await
         .unwrap();
 

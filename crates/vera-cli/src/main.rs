@@ -89,6 +89,9 @@ enum Commands {
     Index {
         /// Path to the directory to index.
         path: String,
+        /// Use local inference for embedding (overrides API provider).
+        #[arg(long)]
+        local: bool,
     },
 
     /// Search the indexed codebase.
@@ -142,6 +145,10 @@ enum Commands {
         /// interface, type_alias, constant, variable, module, block.
         #[arg(long, rename_all = "snake_case")]
         r#type: Option<String>,
+
+        /// Use local inference for embedding and reranking.
+        #[arg(long)]
+        local: bool,
     },
 
     /// Incrementally update the index for changed files.
@@ -166,6 +173,9 @@ enum Commands {
     Update {
         /// Path to the directory to update.
         path: String,
+        /// Use local inference for embedding (overrides API provider).
+        #[arg(long)]
+        local: bool,
     },
 
     /// Show index statistics.
@@ -242,9 +252,9 @@ fn main() {
             commands::mcp::run();
             Ok(())
         }
-        Commands::Index { path } => {
+        Commands::Index { path, local } => {
             tracing::info!(path = %path, "indexing");
-            commands::index::run(&path, cli.json)
+            commands::index::run(&path, cli.json, local)
         }
         Commands::Search {
             query,
@@ -252,6 +262,7 @@ fn main() {
             path,
             limit,
             r#type,
+            local,
         } => {
             tracing::info!(query = %query, "searching");
             let filters = vera_core::types::SearchFilters {
@@ -259,11 +270,11 @@ fn main() {
                 path_glob: path,
                 symbol_type: r#type,
             };
-            commands::search::run(&query, limit, &filters, cli.json)
+            commands::search::run(&query, limit, &filters, cli.json, local)
         }
-        Commands::Update { path } => {
+        Commands::Update { path, local } => {
             tracing::info!(path = %path, "updating");
-            commands::update::run(&path, cli.json)
+            commands::update::run(&path, cli.json, local)
         }
         Commands::Stats => {
             tracing::info!("showing stats");
@@ -288,7 +299,7 @@ mod tests {
     #[test]
     fn cli_parses_index_command() {
         let cli = Cli::parse_from(["vera", "index", "/tmp/repo"]);
-        assert!(matches!(cli.command, Commands::Index { path } if path == "/tmp/repo"));
+        assert!(matches!(cli.command, Commands::Index { path, .. } if path == "/tmp/repo"));
     }
 
     #[test]
@@ -366,6 +377,7 @@ mod tests {
                 path,
                 limit,
                 r#type,
+                ..
             } => {
                 assert_eq!(query, "handle request");
                 assert_eq!(lang, Some("typescript".to_string()));
@@ -380,7 +392,7 @@ mod tests {
     #[test]
     fn cli_parses_update_command() {
         let cli = Cli::parse_from(["vera", "update", "/tmp/repo"]);
-        assert!(matches!(cli.command, Commands::Update { path } if path == "/tmp/repo"));
+        assert!(matches!(cli.command, Commands::Update { path, .. } if path == "/tmp/repo"));
     }
 
     #[test]

@@ -56,13 +56,13 @@ async fn update_no_changes() {
     let config = default_config();
 
     // Initial index.
-    let idx_summary = index_repository(dir.path(), &provider, &config)
+    let idx_summary = index_repository(dir.path(), &provider, &config, "mock-model")
         .await
         .unwrap();
     assert!(idx_summary.chunks_created > 0);
 
     // Update with no changes.
-    let update_summary = update_repository(dir.path(), &provider, &config)
+    let update_summary = update_repository(dir.path(), &provider, &config, "mock-model")
         .await
         .unwrap();
 
@@ -92,7 +92,7 @@ async fn update_modified_file() {
     let config = default_config();
 
     // Initial index.
-    let idx_summary = index_repository(dir.path(), &provider, &config)
+    let idx_summary = index_repository(dir.path(), &provider, &config, "mock-model")
         .await
         .unwrap();
     let _initial_chunks = idx_summary.chunks_created as u64;
@@ -105,7 +105,7 @@ async fn update_modified_file() {
     .unwrap();
 
     // Update.
-    let update_summary = update_repository(dir.path(), &provider, &config)
+    let update_summary = update_repository(dir.path(), &provider, &config, "mock-model")
         .await
         .unwrap();
 
@@ -140,7 +140,7 @@ async fn update_added_file() {
     let config = default_config();
 
     // Initial index.
-    let idx_summary = index_repository(dir.path(), &provider, &config)
+    let idx_summary = index_repository(dir.path(), &provider, &config, "mock-model")
         .await
         .unwrap();
     let initial_chunks = idx_summary.chunks_created as u64;
@@ -153,7 +153,7 @@ async fn update_added_file() {
     .unwrap();
 
     // Update.
-    let update_summary = update_repository(dir.path(), &provider, &config)
+    let update_summary = update_repository(dir.path(), &provider, &config, "mock-model")
         .await
         .unwrap();
 
@@ -196,7 +196,7 @@ async fn update_deleted_file() {
     let config = default_config();
 
     // Initial index.
-    let idx_summary = index_repository(dir.path(), &provider, &config)
+    let idx_summary = index_repository(dir.path(), &provider, &config, "mock-model")
         .await
         .unwrap();
     let initial_chunks = idx_summary.chunks_created as u64;
@@ -205,7 +205,7 @@ async fn update_deleted_file() {
     fs::remove_file(dir.path().join("lib.py")).unwrap();
 
     // Update.
-    let update_summary = update_repository(dir.path(), &provider, &config)
+    let update_summary = update_repository(dir.path(), &provider, &config, "mock-model")
         .await
         .unwrap();
 
@@ -242,7 +242,7 @@ async fn update_without_index_fails() {
     let provider = MockProvider::new(8);
     let config = default_config();
 
-    let result = update_repository(dir.path(), &provider, &config).await;
+    let result = update_repository(dir.path(), &provider, &config, "mock-model").await;
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
     assert!(
@@ -272,7 +272,7 @@ async fn update_matches_fresh_index() {
     let config = default_config();
 
     // Initial index.
-    index_repository(dir.path(), &provider, &config)
+    index_repository(dir.path(), &provider, &config, "mock-model")
         .await
         .unwrap();
 
@@ -293,7 +293,7 @@ async fn update_matches_fresh_index() {
     .unwrap();
 
     // Run update.
-    let update_summary = update_repository(dir.path(), &provider, &config)
+    let update_summary = update_repository(dir.path(), &provider, &config, "mock-model")
         .await
         .unwrap();
     assert_eq!(update_summary.files_modified, 1);
@@ -308,7 +308,7 @@ async fn update_matches_fresh_index() {
     let updated_languages = updated_metadata.language_stats().unwrap();
 
     // Now do a fresh index of the same directory.
-    let _fresh_summary = index_repository(dir.path(), &provider, &config)
+    let _fresh_summary = index_repository(dir.path(), &provider, &config, "mock-model")
         .await
         .unwrap();
 
@@ -345,7 +345,7 @@ async fn update_mixed_add_modify_delete() {
     let config = default_config();
 
     // Initial index.
-    index_repository(dir.path(), &provider, &config)
+    index_repository(dir.path(), &provider, &config, "mock-model")
         .await
         .unwrap();
 
@@ -354,7 +354,7 @@ async fn update_mixed_add_modify_delete() {
     fs::remove_file(dir.path().join("b.py")).unwrap();
     fs::write(dir.path().join("d.ts"), "function d(): void {}").unwrap();
 
-    let update_summary = update_repository(dir.path(), &provider, &config)
+    let update_summary = update_repository(dir.path(), &provider, &config, "mock-model")
         .await
         .unwrap();
 
@@ -391,7 +391,7 @@ async fn update_vector_store_consistent() {
     let config = default_config();
 
     // Initial index.
-    index_repository(dir.path(), &provider, &config)
+    index_repository(dir.path(), &provider, &config, "mock-model")
         .await
         .unwrap();
 
@@ -403,7 +403,7 @@ async fn update_vector_store_consistent() {
 
     // Add a file.
     fs::write(dir.path().join("lib.py"), "def lib(): return 1").unwrap();
-    update_repository(dir.path(), &provider, &config)
+    update_repository(dir.path(), &provider, &config, "mock-model")
         .await
         .unwrap();
 
@@ -418,7 +418,7 @@ async fn update_vector_store_consistent() {
 
     // Delete the added file.
     fs::remove_file(dir.path().join("lib.py")).unwrap();
-    update_repository(dir.path(), &provider, &config)
+    update_repository(dir.path(), &provider, &config, "mock-model")
         .await
         .unwrap();
 

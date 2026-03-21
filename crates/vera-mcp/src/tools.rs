@@ -149,6 +149,8 @@ fn handle_search_code(args: &Value) -> ToolCallResult {
         );
     }
 
+    let is_local = vera_core::config::is_local_mode();
+
     // Use the shared search service from vera-core.
     let results = match vera_core::retrieval::search_service::execute_search(
         &index_dir,
@@ -156,6 +158,7 @@ fn handle_search_code(args: &Value) -> ToolCallResult {
         &config,
         &filters,
         result_limit,
+        is_local,
     ) {
         Ok(r) => r,
         Err(e) => return ToolCallResult::error(format!("Search failed: {e}")),
@@ -182,34 +185,29 @@ fn handle_index_project(args: &Value) -> ToolCallResult {
         return ToolCallResult::error(format!("Path is not a directory: {path}"));
     }
 
+    let is_local = vera_core::config::is_local_mode();
+
     let config = vera_core::config::VeraConfig::default();
-
-    let provider_config = match vera_core::embedding::EmbeddingProviderConfig::from_env() {
-        Ok(cfg) => cfg,
-        Err(e) => {
-            return ToolCallResult::error(format!("Embedding API not configured: {e}"));
-        }
-    };
-    let provider_config = provider_config
-        .with_timeout(std::time::Duration::from_secs(
-            config.embedding.timeout_secs,
-        ))
-        .with_max_retries(config.embedding.max_retries);
-
-    let provider = match vera_core::embedding::OpenAiProvider::new(provider_config) {
-        Ok(p) => p,
-        Err(e) => {
-            return ToolCallResult::error(format!("Failed to create embedding provider: {e}"));
-        }
-    };
 
     let rt = match tokio::runtime::Runtime::new() {
         Ok(r) => r,
         Err(e) => return ToolCallResult::error(format!("Failed to create runtime: {e}")),
     };
 
+    let (provider, model_name) = match rt.block_on(vera_core::embedding::create_dynamic_provider(
+        &config, is_local,
+    )) {
+        Ok(res) => res,
+        Err(e) => {
+            return ToolCallResult::error(format!("Failed to create embedding provider: {e}"));
+        }
+    };
+
     match rt.block_on(vera_core::indexing::index_repository(
-        repo_path, &provider, &config,
+        repo_path,
+        &provider,
+        &config,
+        &model_name,
     )) {
         Ok(summary) => match serde_json::to_string_pretty(&summary) {
             Ok(json) => ToolCallResult::success(json),
@@ -234,34 +232,29 @@ fn handle_update_project(args: &Value) -> ToolCallResult {
         return ToolCallResult::error(format!("Path is not a directory: {path}"));
     }
 
+    let is_local = vera_core::config::is_local_mode();
+
     let config = vera_core::config::VeraConfig::default();
-
-    let provider_config = match vera_core::embedding::EmbeddingProviderConfig::from_env() {
-        Ok(cfg) => cfg,
-        Err(e) => {
-            return ToolCallResult::error(format!("Embedding API not configured: {e}"));
-        }
-    };
-    let provider_config = provider_config
-        .with_timeout(std::time::Duration::from_secs(
-            config.embedding.timeout_secs,
-        ))
-        .with_max_retries(config.embedding.max_retries);
-
-    let provider = match vera_core::embedding::OpenAiProvider::new(provider_config) {
-        Ok(p) => p,
-        Err(e) => {
-            return ToolCallResult::error(format!("Failed to create embedding provider: {e}"));
-        }
-    };
 
     let rt = match tokio::runtime::Runtime::new() {
         Ok(r) => r,
         Err(e) => return ToolCallResult::error(format!("Failed to create runtime: {e}")),
     };
 
+    let (provider, model_name) = match rt.block_on(vera_core::embedding::create_dynamic_provider(
+        &config, is_local,
+    )) {
+        Ok(res) => res,
+        Err(e) => {
+            return ToolCallResult::error(format!("Failed to create embedding provider: {e}"));
+        }
+    };
+
     match rt.block_on(vera_core::indexing::update_repository(
-        repo_path, &provider, &config,
+        repo_path,
+        &provider,
+        &config,
+        &model_name,
     )) {
         Ok(summary) => match serde_json::to_string_pretty(&summary) {
             Ok(json) => ToolCallResult::success(json),

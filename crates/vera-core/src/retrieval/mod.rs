@@ -20,6 +20,9 @@ pub use reranker::{
     ApiReranker, RerankScore, Reranker, RerankerConfig, RerankerError, rerank_results,
 };
 
+pub mod dynamic_reranker;
+pub use dynamic_reranker::{DynamicReranker, create_dynamic_reranker};
+
 #[cfg(feature = "local")]
 pub mod local_reranker;
 

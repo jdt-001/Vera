@@ -4,16 +4,12 @@
 //! build reranker, compute fetch limits, execute search, apply filters.
 
 use std::path::Path;
-use std::time::Duration;
 
 use anyhow::Result;
 use tracing::warn;
 
 use crate::config::VeraConfig;
-use crate::embedding::{CachedEmbeddingProvider, EmbeddingProviderConfig, OpenAiProvider};
-use crate::retrieval::{
-    ApiReranker, RerankerConfig, apply_filters, search_bm25, search_hybrid, search_hybrid_reranked,
-};
+use crate::retrieval::{apply_filters, search_bm25, search_hybrid, search_hybrid_reranked};
 use crate::types::{SearchFilters, SearchResult};
 
 /// Execute a search against the index at `index_dir`.
@@ -26,42 +22,59 @@ pub fn execute_search(
     config: &VeraConfig,
     filters: &SearchFilters,
     result_limit: usize,
+    is_local: bool,
 ) -> Result<Vec<SearchResult>> {
     let fetch_limit = compute_fetch_limit(filters, result_limit);
+    let rt = tokio::runtime::Runtime::new()?;
 
     // Try to create embedding provider for hybrid search.
-    let provider_config = match EmbeddingProviderConfig::from_env() {
-        Ok(cfg) => cfg,
-        Err(_) => {
-            warn!("Embedding API not configured, using BM25-only search");
-            let results = search_bm25(index_dir, query, fetch_limit)?;
-            return Ok(apply_filters(results, filters, result_limit));
+    let (provider, model_name) =
+        match rt.block_on(crate::embedding::create_dynamic_provider(config, is_local)) {
+            Ok(res) => res,
+            Err(e) => {
+                warn!(
+                    "Failed to create embedding provider ({}), using BM25-only search",
+                    e
+                );
+                let results = search_bm25(index_dir, query, fetch_limit)?;
+                return Ok(apply_filters(results, filters, result_limit));
+            }
+        };
+
+    // Check metadata mismatch
+    let metadata_path = index_dir.join("metadata.db");
+    if let Ok(metadata_store) = crate::storage::metadata::MetadataStore::open(&metadata_path) {
+        if let (Some(s_model), Some(s_dim)) = (
+            metadata_store.get_index_meta("model_name").unwrap_or(None),
+            metadata_store
+                .get_index_meta("embedding_dim")
+                .unwrap_or(None),
+        ) {
+            if s_model != model_name {
+                anyhow::bail!(
+                    "Index was created with model '{}' ({} dimensions), but you are using model '{}'. Please re-index with matching provider.",
+                    s_model,
+                    s_dim,
+                    model_name
+                );
+            }
         }
-    };
+    }
 
-    let provider_config = provider_config
-        .with_timeout(Duration::from_secs(config.embedding.timeout_secs))
-        .with_max_retries(config.embedding.max_retries);
-
-    let provider = match OpenAiProvider::new(provider_config) {
-        Ok(p) => p,
-        Err(_) => {
-            warn!("Failed to create embedding provider, using BM25-only search");
-            let results = search_bm25(index_dir, query, fetch_limit)?;
-            return Ok(apply_filters(results, filters, result_limit));
-        }
-    };
-
-    let provider = CachedEmbeddingProvider::new(provider, 512);
+    let provider = crate::embedding::CachedEmbeddingProvider::new(provider, 512);
 
     // Create optional reranker.
-    let reranker = create_reranker(config);
+    let reranker = rt
+        .block_on(crate::retrieval::create_dynamic_reranker(config, is_local))
+        .unwrap_or_else(|e| {
+            warn!("Failed to create reranker ({})", e);
+            None
+        });
 
     let stored_dim = config.embedding.max_stored_dim;
     let rrf_k = config.retrieval.rrf_k;
     let rerank_candidates = config.retrieval.rerank_candidates;
 
-    let rt = tokio::runtime::Runtime::new()?;
     let results = if let Some(ref reranker) = reranker {
         rt.block_on(search_hybrid_reranked(
             index_dir,
@@ -85,19 +98,6 @@ pub fn execute_search(
     };
 
     Ok(apply_filters(results, filters, result_limit))
-}
-
-/// Create the optional reranker from environment configuration.
-fn create_reranker(config: &VeraConfig) -> Option<ApiReranker> {
-    if !config.retrieval.reranking_enabled {
-        return None;
-    }
-
-    let reranker_config = RerankerConfig::from_env().ok()?;
-    let reranker_config = reranker_config
-        .with_timeout(Duration::from_secs(30))
-        .with_max_retries(2);
-    ApiReranker::new(reranker_config).ok()
 }
 
 /// Compute how many candidates to fetch before filtering.

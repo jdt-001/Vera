@@ -8,10 +8,7 @@ use tokio::io::AsyncWriteExt;
 const HUB_URL: &str = "https://huggingface.co";
 
 /// Download a file from HuggingFace Hub using atomic writes.
-pub async fn ensure_model_file(
-    repo_id: &str,
-    file_path: &str,
-) -> Result<PathBuf> {
+pub async fn ensure_model_file(repo_id: &str, file_path: &str) -> Result<PathBuf> {
     let home_dir = dirs::home_dir().context("Could not find home directory")?;
     let models_dir = home_dir.join(".vera").join("models").join(repo_id);
     let target_path = models_dir.join(file_path);
@@ -40,9 +37,13 @@ pub async fn ensure_model_file(
         let chunk = chunk?;
         file.write_all(&chunk).await?;
         downloaded += chunk.len() as u64;
-        
+
         if let Some(total) = total_size {
-            eprint!("\rProgress: {} MB / {} MB", downloaded / 1_000_000, total / 1_000_000);
+            eprint!(
+                "\rProgress: {} MB / {} MB",
+                downloaded / 1_000_000,
+                total / 1_000_000
+            );
         } else {
             eprint!("\rProgress: {} MB", downloaded / 1_000_000);
         }

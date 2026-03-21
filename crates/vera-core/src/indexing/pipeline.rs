@@ -91,6 +91,7 @@ pub async fn index_repository<P: EmbeddingProvider>(
     repo_path: &Path,
     provider: &P,
     config: &VeraConfig,
+    model_name: &str,
 ) -> Result<IndexSummary> {
     let start = Instant::now();
 
@@ -176,7 +177,7 @@ pub async fn index_repository<P: EmbeddingProvider>(
 
     // ── 5. Store everything on disk ──────────────────────────────
     let idx_dir = index_dir(&repo_root);
-    store_index(&idx_dir, &all_chunks, &embeddings, &file_hashes)
+    store_index(&idx_dir, &all_chunks, &embeddings, &file_hashes, model_name)
         .context("failed to write index artifacts")?;
 
     info!(index_dir = %idx_dir.display(), "index artifacts written");
@@ -282,6 +283,7 @@ fn store_index(
     chunks: &[Chunk],
     embeddings: &[(String, Vec<f32>)],
     file_hashes: &[(String, String)],
+    model_name: &str,
 ) -> Result<()> {
     // Ensure index directory exists.
     std::fs::create_dir_all(idx_dir)
@@ -308,6 +310,13 @@ fn store_index(
             .set_file_hash(file_path, hash)
             .context("failed to store file hash")?;
     }
+
+    metadata_store
+        .set_index_meta("model_name", model_name)
+        .context("failed to store model_name")?;
+    metadata_store
+        .set_index_meta("embedding_dim", &dim.to_string())
+        .context("failed to store embedding_dim")?;
 
     debug!(chunks = chunks.len(), "metadata stored");
 

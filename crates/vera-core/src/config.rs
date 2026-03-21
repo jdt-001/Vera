@@ -100,6 +100,13 @@ impl Default for EmbeddingConfig {
     }
 }
 
+/// Check if the local inference mode is active.
+pub fn is_local_mode() -> bool {
+    std::env::var("VERA_LOCAL")
+        .map(|v| v == "1" || v == "true")
+        .unwrap_or(false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

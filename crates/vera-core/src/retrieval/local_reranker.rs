@@ -1,7 +1,7 @@
-use crate::retrieval::reranker::{RerankScore, Reranker, RerankerError};
 use crate::local_models::ensure_model_file;
+use crate::retrieval::reranker::{RerankScore, Reranker, RerankerError};
 use anyhow::Result;
-use ort::session::{builder::GraphOptimizationLevel, Session};
+use ort::session::{Session, builder::GraphOptimizationLevel};
 use std::sync::{Arc, Mutex};
 use tokenizers::Tokenizer;
 use tokio::task;
@@ -20,30 +20,50 @@ impl LocalReranker {
     pub async fn new() -> Result<Self, RerankerError> {
         let onnx_path = ensure_model_file(RERANKER_REPO, ONNX_FILE)
             .await
-            .map_err(|e| RerankerError::ApiError { status: 500, message: format!("Failed to download ONNX model: {}", e) })?;
+            .map_err(|e| RerankerError::ApiError {
+                status: 500,
+                message: format!("Failed to download ONNX model: {}", e),
+            })?;
 
         let tokenizer_path = ensure_model_file(RERANKER_REPO, TOKENIZER_FILE)
             .await
-            .map_err(|e| RerankerError::ApiError { status: 500, message: format!("Failed to download tokenizer: {}", e) })?;
+            .map_err(|e| RerankerError::ApiError {
+                status: 500,
+                message: format!("Failed to download tokenizer: {}", e),
+            })?;
 
         let tokenizer = task::spawn_blocking(move || {
             Tokenizer::from_file(tokenizer_path)
                 .map_err(|e| anyhow::anyhow!("Tokenizer init failed: {}", e))
         })
         .await
-        .map_err(|e| RerankerError::ApiError { status: 500, message: e.to_string() })?
-        .map_err(|e| RerankerError::ApiError { status: 500, message: e.to_string() })?;
+        .map_err(|e| RerankerError::ApiError {
+            status: 500,
+            message: e.to_string(),
+        })?
+        .map_err(|e| RerankerError::ApiError {
+            status: 500,
+            message: e.to_string(),
+        })?;
 
         let session = task::spawn_blocking(move || {
-            let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1);
+            let threads = std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1);
             ort::session::builder::SessionBuilder::new()?
                 .with_optimization_level(GraphOptimizationLevel::Level3)?
                 .with_intra_threads(threads)?
                 .commit_from_file(onnx_path)
         })
         .await
-        .map_err(|e| RerankerError::ApiError { status: 500, message: e.to_string() })?
-        .map_err(|e| RerankerError::ApiError { status: 500, message: e.to_string() })?;
+        .map_err(|e| RerankerError::ApiError {
+            status: 500,
+            message: e.to_string(),
+        })?
+        .map_err(|e| RerankerError::ApiError {
+            status: 500,
+            message: e.to_string(),
+        })?;
 
         Ok(Self {
             session: Arc::new(Mutex::new(session)),
@@ -59,17 +79,23 @@ impl LocalReranker {
 
         let mut encodings = Vec::with_capacity(documents.len());
         for doc in documents {
-            let encoding = self.tokenizer.encode((query.to_string(), doc.clone()), true)
+            let encoding = self
+                .tokenizer
+                .encode((query.to_string(), doc.clone()), true)
                 .map_err(|e| anyhow::anyhow!("Tokenizer error: {}", e))?;
             encodings.push(encoding);
         }
 
         let batch_size = documents.len();
-        let mut max_len = encodings.iter().map(|e| e.get_ids().len()).max().unwrap_or(0);
+        let mut max_len = encodings
+            .iter()
+            .map(|e| e.get_ids().len())
+            .max()
+            .unwrap_or(0);
         if max_len == 0 {
             max_len = 1;
         }
-        
+
         let truncate_len = 512;
         if max_len > truncate_len {
             max_len = truncate_len;
@@ -88,8 +114,10 @@ impl LocalReranker {
             }
         }
 
-        let input_ids_tensor = ort::value::Tensor::from_array(input_ids).map_err(|e| anyhow::anyhow!("Tensor error: {}", e))?;
-        let attention_mask_tensor = ort::value::Tensor::from_array(attention_mask).map_err(|e| anyhow::anyhow!("Tensor error: {}", e))?;
+        let input_ids_tensor = ort::value::Tensor::from_array(input_ids)
+            .map_err(|e| anyhow::anyhow!("Tensor error: {}", e))?;
+        let attention_mask_tensor = ort::value::Tensor::from_array(attention_mask)
+            .map_err(|e| anyhow::anyhow!("Tensor error: {}", e))?;
 
         let inputs = ort::inputs![
             "input_ids" => input_ids_tensor,
@@ -98,11 +126,11 @@ impl LocalReranker {
 
         let mut session = self.session.lock().unwrap();
         let outputs = session.run(inputs)?;
-        
+
         let output_value = outputs.values().next().unwrap();
         let (shape, data) = output_value.try_extract_tensor::<f32>()?;
         let ndim = shape.len();
-        
+
         let mut results = Vec::with_capacity(batch_size);
         if ndim == 2 {
             let dim = shape[1] as usize;
@@ -138,13 +166,20 @@ impl Reranker for LocalReranker {
         let provider = self.clone();
         let query = query.to_string();
         let documents = documents.to_vec();
-        
+
         task::spawn_blocking(move || {
-            provider.do_rerank(&query, &documents)
-                .map_err(|e| RerankerError::ApiError { status: 500, message: e.to_string() })
+            provider
+                .do_rerank(&query, &documents)
+                .map_err(|e| RerankerError::ApiError {
+                    status: 500,
+                    message: e.to_string(),
+                })
         })
         .await
-        .map_err(|e| RerankerError::ApiError { status: 500, message: e.to_string() })?
+        .map_err(|e| RerankerError::ApiError {
+            status: 500,
+            message: e.to_string(),
+        })?
     }
 }
 
@@ -162,9 +197,17 @@ mod tests {
         ];
         let scores = reranker.rerank(&query, &docs).await.unwrap();
         assert_eq!(scores.len(), 2);
-        
-        let relevant_score = scores.iter().find(|s| s.index == 1).unwrap().relevance_score;
-        let irrelevant_score = scores.iter().find(|s| s.index == 0).unwrap().relevance_score;
+
+        let relevant_score = scores
+            .iter()
+            .find(|s| s.index == 1)
+            .unwrap()
+            .relevance_score;
+        let irrelevant_score = scores
+            .iter()
+            .find(|s| s.index == 0)
+            .unwrap()
+            .relevance_score;
         assert!(relevant_score > irrelevant_score);
     }
 }
