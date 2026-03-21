@@ -41,9 +41,16 @@ impl LocalEmbeddingProvider {
                 message: format!("Failed to download tokenizer: {}", e),
             })?;
 
-        let tokenizer = task::spawn_blocking(move || {
-            Tokenizer::from_file(tokenizer_path)
-                .map_err(|e| anyhow::anyhow!("Tokenizer init failed: {}", e))
+        let tokenizer = task::spawn_blocking(move || -> Result<Tokenizer, anyhow::Error> {
+            let mut t = Tokenizer::from_file(tokenizer_path)
+                .map_err(|e| anyhow::anyhow!("Tokenizer init failed: {}", e))?;
+            t.with_truncation(Some(tokenizers::TruncationParams {
+                max_length: 512,
+                strategy: tokenizers::TruncationStrategy::LongestFirst,
+                ..Default::default()
+            }))
+            .unwrap();
+            Ok(t)
         })
         .await
         .map_err(|e| EmbeddingError::ApiError {
@@ -57,7 +64,7 @@ impl LocalEmbeddingProvider {
 
         let session = task::spawn_blocking(move || {
             let threads = std::thread::available_parallelism()
-                .map(|n| n.get())
+                .map(|n| n.get().min(4))
                 .unwrap_or(1);
             ort::session::builder::SessionBuilder::new()?
                 .with_optimization_level(GraphOptimizationLevel::Level3)?
