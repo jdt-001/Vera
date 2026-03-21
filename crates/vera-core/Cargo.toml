@@ -22,7 +22,7 @@ rusqlite = { workspace = true }
 tantivy = { workspace = true }
 
 # HTTP client for embedding/reranker APIs
-reqwest = { workspace = true }
+reqwest = { workspace = true, features = ["stream"] }
 tree-sitter-rust = "0.24.1"
 tree-sitter-python = "0.25.0"
 tree-sitter-typescript = "0.23.2"
@@ -51,6 +51,11 @@ tree-sitter-haskell = "0.23.1"
 tree-sitter-elixir = "0.3.5"
 tree-sitter-dart = "0.1.0"
 tree-sitter-hcl = { git = "https://github.com/tree-sitter-grammars/tree-sitter-hcl", version = "1.2.0" }
+ort = { version = "2.0.0-rc.10", optional = true, features = ["ndarray"] }
+tokenizers = { version = "0.22.2", optional = true }
+dirs = "6.0.0"
+ndarray = "0.17.2"
+async-trait = "0.1.89"
 
 [build-dependencies]
 cc = "1.0"
@@ -58,3 +63,8 @@ cc = "1.0"
 [dev-dependencies]
 tempfile = "3"
 tokio = { workspace = true, features = ["test-util", "macros"] }
+
+[features]
+ort = ["dep:ort"]
+tokenizers = ["dep:tokenizers"]
+local = ["ort", "tokenizers"]

@@ -19,6 +19,13 @@ pub use hybrid::{HybridSearchError, fuse_rrf, search_hybrid, search_hybrid_reran
 pub use reranker::{
     ApiReranker, RerankScore, Reranker, RerankerConfig, RerankerError, rerank_results,
 };
+
+#[cfg(feature = "local")]
+pub mod local_reranker;
+
+#[cfg(feature = "local")]
+pub use local_reranker::LocalReranker;
+
 pub use vector::{VectorSearchError, search_vector, search_vector_with_stores};
 
 use crate::types::{SearchFilters, SearchResult};

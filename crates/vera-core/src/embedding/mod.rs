@@ -14,6 +14,12 @@ pub use provider::{
     OpenAiProvider, embed_chunks, embed_chunks_concurrent,
 };
 
+#[cfg(feature = "local")]
+pub mod local_provider;
+
+#[cfg(feature = "local")]
+pub use local_provider::LocalEmbeddingProvider;
+
 /// Test helpers for creating mock embedding providers.
 #[cfg(test)]
 pub(crate) mod test_helpers {

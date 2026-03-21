@@ -25,5 +25,8 @@ pub mod types;
 /// Configuration types and defaults.
 pub mod config;
 
+#[cfg(feature = "local")]
+pub mod local_models;
+
 /// Index statistics collection.
 pub mod stats;
