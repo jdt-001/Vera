@@ -27,6 +27,11 @@ pub fn tree_sitter_grammar(lang: Language) -> Option<TsLanguage> {
         Language::Zig => tree_sitter_zig::LANGUAGE,
         Language::Lua => tree_sitter_lua::LANGUAGE,
         Language::Scala => tree_sitter_scala::LANGUAGE,
+        Language::CSharp => tree_sitter_c_sharp::LANGUAGE,
+        Language::Php => tree_sitter_php::LANGUAGE_PHP,
+        Language::Haskell => tree_sitter_haskell::LANGUAGE,
+        Language::Elixir => tree_sitter_elixir::LANGUAGE,
+        Language::Dart => tree_sitter_dart::LANGUAGE,
         // Languages without tree-sitter grammar support → Tier 0 fallback
         Language::Toml
         | Language::Yaml
@@ -64,6 +69,11 @@ mod tests {
             Language::Zig,
             Language::Lua,
             Language::Scala,
+            Language::CSharp,
+            Language::Php,
+            Language::Haskell,
+            Language::Elixir,
+            Language::Dart,
         ];
         for lang in tier_1a {
             assert!(

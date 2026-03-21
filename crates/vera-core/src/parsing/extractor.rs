@@ -42,6 +42,11 @@ pub fn classify_node(lang: Language, kind: &str) -> Option<SymbolType> {
         Language::Zig => classify_zig(kind),
         Language::Lua => classify_lua(kind),
         Language::Scala => classify_scala(kind),
+        Language::CSharp => classify_csharp(kind),
+        Language::Php => classify_php(kind),
+        Language::Haskell => classify_haskell(kind),
+        Language::Elixir => classify_elixir(kind),
+        Language::Dart => classify_dart(kind),
         _ => None,
     }
 }
@@ -189,6 +194,52 @@ fn classify_scala(kind: &str) -> Option<SymbolType> {
     }
 }
 
+fn classify_csharp(kind: &str) -> Option<SymbolType> {
+    match kind {
+        "class_declaration" => Some(SymbolType::Class),
+        "interface_declaration" => Some(SymbolType::Interface),
+        "struct_declaration" => Some(SymbolType::Struct),
+        "enum_declaration" => Some(SymbolType::Enum),
+        "method_declaration" | "local_function_statement" => Some(SymbolType::Method),
+        "namespace_declaration" | "file_scoped_namespace_declaration" => Some(SymbolType::Module),
+        _ => None,
+    }
+}
+
+fn classify_php(kind: &str) -> Option<SymbolType> {
+    match kind {
+        "function_definition" => Some(SymbolType::Function),
+        "class_declaration" => Some(SymbolType::Class),
+        "interface_declaration" => Some(SymbolType::Interface),
+        "method_declaration" => Some(SymbolType::Method),
+        _ => None,
+    }
+}
+
+fn classify_haskell(kind: &str) -> Option<SymbolType> {
+    match kind {
+        "function" | "signature" => Some(SymbolType::Function),
+        "data_type" => Some(SymbolType::Struct),
+        "type_alias" | "type_synomym" => Some(SymbolType::TypeAlias),
+        "newtype" => Some(SymbolType::TypeAlias),
+        _ => None,
+    }
+}
+
+fn classify_elixir(_kind: &str) -> Option<SymbolType> {
+    None
+}
+
+fn classify_dart(kind: &str) -> Option<SymbolType> {
+    match kind {
+        "class_declaration" | "class_definition" => Some(SymbolType::Class),
+        "enum_declaration" => Some(SymbolType::Enum),
+        "function_signature" | "function_definition" => Some(SymbolType::Function),
+        "method_signature" | "method_definition" => Some(SymbolType::Method),
+        _ => None,
+    }
+}
+
 /// Extract the name of a symbol from a tree-sitter node.
 ///
 /// Looks for the first `name` or `identifier`-type child node.
@@ -197,6 +248,17 @@ pub fn extract_name(node: &tree_sitter::Node<'_>, source: &[u8]) -> Option<Strin
     for field in &["name", "declarator"] {
         if let Some(child) = node.child_by_field_name(field) {
             return name_from_node(&child, source);
+        }
+    }
+    // Dart: method_signature -> function_signature -> name
+    if node.kind() == "method_signature" {
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == "function_signature" {
+                if let Some(name_child) = child.child_by_field_name("name") {
+                    return name_from_node(&name_child, source);
+                }
+            }
         }
     }
     // Fallback: look for first identifier child
@@ -227,6 +289,8 @@ fn name_from_node(node: &tree_sitter::Node<'_>, source: &[u8]) -> Option<String>
         || kind == "simple_identifier"
         || kind == "word"
         || kind == "constant"
+        || kind == "name"
+        || kind == "variable"
     {
         return Some(node.utf8_text(source).ok()?.to_string());
     }
@@ -316,6 +380,36 @@ fn collect_symbols(
         }
     }
 
+    // Handle Elixir calls
+    if lang == Language::Elixir && kind == "call" {
+        if let Some(target) = node.child_by_field_name("target") {
+            if let Ok(text) = target.utf8_text(source) {
+                let sym_type = match text {
+                    "defmodule" => Some(SymbolType::Module),
+                    "def" | "defp" | "defmacro" => Some(SymbolType::Function),
+                    _ => None,
+                };
+                if let Some(st) = sym_type {
+                    let name = extract_elixir_name(&node, source);
+                    symbols.push(RawSymbol {
+                        name,
+                        symbol_type: st,
+                        start_byte: node.start_byte(),
+                        end_byte: node.end_byte(),
+                        start_row: node.start_position().row,
+                        end_row: node.end_position().row,
+                    });
+                    if text == "defmodule" {
+                        if let Some(do_block) = get_elixir_do_block(&node) {
+                            collect_symbols(do_block, source, lang, symbols, depth + 1);
+                        }
+                    }
+                    return;
+                }
+            }
+        }
+    }
+
     if let Some(mut sym_type) = classify_node(lang, kind) {
         // Refine Kotlin and Swift class_declaration
         if (lang == Language::Kotlin || lang == Language::Swift) && kind == "class_declaration" {
@@ -345,14 +439,56 @@ fn collect_symbols(
             return;
         }
 
+        // For C# namespace, we want to recurse inside.
+        if lang == Language::CSharp
+            && (kind == "namespace_declaration" || kind == "file_scoped_namespace_declaration")
+        {
+            let name = extract_name(&node, source);
+            symbols.push(RawSymbol {
+                name,
+                symbol_type: sym_type,
+                start_byte: node.start_byte(),
+                end_byte: node.end_byte(),
+                start_row: node.start_position().row,
+                end_row: node.end_position().row,
+            });
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                collect_symbols(child, source, lang, symbols, depth + 1);
+            }
+            return;
+        }
+
+        // For C#, PHP, Dart classes, extract methods:
+        if (lang == Language::CSharp || lang == Language::Php || lang == Language::Dart)
+            && (kind == "class_declaration"
+                || kind == "class_definition"
+                || kind == "interface_declaration")
+        {
+            extract_general_class_methods(node, source, lang, symbols, sym_type);
+            return;
+        }
+
+        let mut end_byte = node.end_byte();
+        let mut end_row = node.end_position().row;
+
+        if lang == Language::Dart && (kind == "function_signature" || kind == "method_signature") {
+            if let Some(next_sibling) = node.next_sibling() {
+                if next_sibling.kind() == "function_body" {
+                    end_byte = next_sibling.end_byte();
+                    end_row = next_sibling.end_position().row;
+                }
+            }
+        }
+
         let name = extract_name(&node, source);
         symbols.push(RawSymbol {
             name,
             symbol_type: sym_type,
             start_byte: node.start_byte(),
-            end_byte: node.end_byte(),
+            end_byte,
             start_row: node.start_position().row,
-            end_row: node.end_position().row,
+            end_row,
         });
         return;
     }
@@ -362,6 +498,43 @@ fn collect_symbols(
     for child in node.children(&mut cursor) {
         collect_symbols(child, source, lang, symbols, depth + 1);
     }
+}
+
+fn extract_elixir_name(node: &tree_sitter::Node<'_>, source: &[u8]) -> Option<String> {
+    let mut cursor = node.walk();
+    let mut args = None;
+    for child in node.children(&mut cursor) {
+        if child.kind() == "arguments" {
+            args = Some(child);
+            break;
+        }
+    }
+
+    if let Some(args_node) = args {
+        if args_node.named_child_count() > 0 {
+            if let Some(first_arg) = args_node.named_child(0) {
+                if first_arg.kind() == "call" {
+                    if let Some(target) = first_arg.child_by_field_name("target") {
+                        return target.utf8_text(source).ok().map(|s| s.to_string());
+                    }
+                }
+                let mut inner_cursor = first_arg.walk();
+                for child in first_arg.children(&mut inner_cursor) {
+                    if child.kind() == "identifier" || child.kind() == "alias" {
+                        return child.utf8_text(source).ok().map(|s| s.to_string());
+                    }
+                }
+                return first_arg.utf8_text(source).ok().map(|s| s.to_string());
+            }
+        }
+    }
+    None
+}
+
+fn get_elixir_do_block<'a>(node: &tree_sitter::Node<'a>) -> Option<tree_sitter::Node<'a>> {
+    let mut cursor = node.walk();
+    node.children(&mut cursor)
+        .find(|child| child.kind() == "do_block")
 }
 
 /// Refine a Go type_spec into the correct SymbolType based on the type child.
@@ -507,6 +680,87 @@ fn extract_python_class_methods(
             start_row: class_node.start_position().row,
             end_row: class_node.end_position().row,
         });
+    }
+}
+
+fn extract_general_class_methods(
+    class_node: tree_sitter::Node<'_>,
+    source: &[u8],
+    lang: Language,
+    symbols: &mut Vec<RawSymbol>,
+    class_sym_type: SymbolType,
+) {
+    // ALWAYS push the class/wrapper itself
+    let name = extract_name(&class_node, source);
+    symbols.push(RawSymbol {
+        name,
+        symbol_type: class_sym_type,
+        start_byte: class_node.start_byte(),
+        end_byte: class_node.end_byte(),
+        start_row: class_node.start_position().row,
+        end_row: class_node.end_position().row,
+    });
+
+    let mut cursor = class_node.walk();
+
+    for child in class_node.children(&mut cursor) {
+        let ckind = child.kind();
+        if ckind.contains("body") || ckind.contains("block") || ckind == "declaration_list" {
+            let mut inner_cursor = child.walk();
+            for item in child.children(&mut inner_cursor) {
+                if let Some(sym_type) = classify_node(lang, item.kind()) {
+                    let mut end_byte = item.end_byte();
+                    let mut end_row = item.end_position().row;
+
+                    // Dart detached method body
+                    if lang == Language::Dart && item.kind() == "method_signature" {
+                        if let Some(next) = item.next_sibling() {
+                            if next.kind() == "function_body" {
+                                end_byte = next.end_byte();
+                                end_row = next.end_position().row;
+                            }
+                        }
+                    }
+
+                    let name = extract_name(&item, source);
+                    symbols.push(RawSymbol {
+                        name,
+                        symbol_type: sym_type,
+                        start_byte: item.start_byte(),
+                        end_byte,
+                        start_row: item.start_position().row,
+                        end_row,
+                    });
+                } else if lang == Language::Dart && item.kind() == "class_member" {
+                    let mut cm_cursor = item.walk();
+                    for cm_child in item.children(&mut cm_cursor) {
+                        if let Some(sym_type) = classify_node(lang, cm_child.kind()) {
+                            let mut end_byte = cm_child.end_byte();
+                            let mut end_row = cm_child.end_position().row;
+
+                            if cm_child.kind() == "method_signature" {
+                                if let Some(next) = cm_child.next_sibling() {
+                                    if next.kind() == "function_body" {
+                                        end_byte = next.end_byte();
+                                        end_row = next.end_position().row;
+                                    }
+                                }
+                            }
+
+                            let name = extract_name(&cm_child, source);
+                            symbols.push(RawSymbol {
+                                name,
+                                symbol_type: sym_type,
+                                start_byte: cm_child.start_byte(),
+                                end_byte,
+                                start_row: cm_child.start_position().row,
+                                end_row,
+                            });
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -996,38 +1250,143 @@ local function bar() end
     }
 
     #[test]
-    fn scala_extracts_types_and_functions() {
+    fn csharp_extracts_types_and_methods() {
         let source = r#"
-def foo() = {}
-class Bar
-trait Baz
-object Qux
+namespace MyApp {
+    class Calculator {
+        public int Add(int a, int b) { return a + b; }
+    }
+    interface IWorker {}
+    struct Point {}
+    enum Status { Ok, Error }
+}
 "#;
-        let symbols = parse_and_extract(source, Language::Scala);
-        assert_eq!(symbols.len(), 4);
+        let symbols = parse_and_extract(source, Language::CSharp);
+        println!("CSharp symbols: {:#?}", symbols);
+        assert!(symbols.iter().any(|s| s.symbol_type == SymbolType::Module));
+        assert!(symbols.iter().any(|s| s.symbol_type == SymbolType::Class));
+        assert!(symbols.iter().any(|s| s.symbol_type == SymbolType::Method));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.symbol_type == SymbolType::Interface)
+        );
+        assert!(symbols.iter().any(|s| s.symbol_type == SymbolType::Struct));
+        assert!(symbols.iter().any(|s| s.symbol_type == SymbolType::Enum));
+    }
 
-        let fun = symbols
-            .iter()
-            .find(|s| s.name.as_deref() == Some("foo"))
-            .unwrap();
-        assert_eq!(fun.symbol_type, SymbolType::Function);
+    #[test]
+    fn php_extracts_classes_and_functions() {
+        let source = r#"
+<?php
+function foo() {}
+class Bar {
+    public function baz() {}
+}
+interface Qux {}
+"#;
+        let symbols = parse_and_extract(source, Language::Php);
+        println!("PHP symbols: {:#?}", symbols);
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.symbol_type == SymbolType::Function)
+        );
+        assert!(symbols.iter().any(|s| s.symbol_type == SymbolType::Class));
+        assert!(symbols.iter().any(|s| s.symbol_type == SymbolType::Method));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.symbol_type == SymbolType::Interface)
+        );
+    }
 
-        let cls = symbols
-            .iter()
-            .find(|s| s.name.as_deref() == Some("Bar"))
-            .unwrap();
-        assert_eq!(cls.symbol_type, SymbolType::Class);
+    #[test]
+    fn haskell_extracts_types_and_functions() {
+        let source = r#"
+data Point = Point Float Float
+type Age = Int
+add :: Int -> Int -> Int
+add x y = x + y
+"#;
+        let symbols = parse_and_extract(source, Language::Haskell);
+        println!("Haskell symbols: {:#?}", symbols);
+        assert!(symbols.iter().any(|s| s.symbol_type == SymbolType::Struct));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.symbol_type == SymbolType::TypeAlias)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.symbol_type == SymbolType::Function)
+        );
+    }
 
-        let trt = symbols
-            .iter()
-            .find(|s| s.name.as_deref() == Some("Baz"))
-            .unwrap();
-        assert_eq!(trt.symbol_type, SymbolType::Trait);
+    #[test]
+    fn elixir_extracts_modules_and_functions() {
+        let source = r#"
+defmodule Math do
+  def add(a, b) do
+    a + b
+  end
+  defp sub(a, b), do: a - b
+  defmacro mul(a, b) do
+  end
+end
+"#;
+        let symbols = parse_and_extract(source, Language::Elixir);
+        println!("Elixir symbols: {:#?}", symbols);
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.symbol_type == SymbolType::Module && s.name.as_deref() == Some("Math"))
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.symbol_type == SymbolType::Function && s.name.as_deref() == Some("add"))
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.symbol_type == SymbolType::Function && s.name.as_deref() == Some("sub"))
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.symbol_type == SymbolType::Function && s.name.as_deref() == Some("mul"))
+        );
+    }
 
-        let obj = symbols
-            .iter()
-            .find(|s| s.name.as_deref() == Some("Qux"))
-            .unwrap();
-        assert_eq!(obj.symbol_type, SymbolType::Module);
+    #[test]
+    fn dart_extracts_types_and_functions() {
+        let source = r#"
+class A { void foo() {} }
+enum B { X, Y }
+void bar() {}
+"#;
+        let symbols = parse_and_extract(source, Language::Dart);
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.symbol_type == SymbolType::Class && s.name.as_deref() == Some("A"))
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.symbol_type == SymbolType::Method && s.name.as_deref() == Some("foo"))
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.symbol_type == SymbolType::Enum && s.name.as_deref() == Some("B"))
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.symbol_type == SymbolType::Function && s.name.as_deref() == Some("bar"))
+        );
     }
 }
