@@ -183,6 +183,20 @@ pub enum Language {
     CMake,
     Dockerfile,
     Xml,
+    /// Tier 2A code languages.
+    ObjectiveC,
+    Perl,
+    Julia,
+    Nix,
+    OCaml,
+    Groovy,
+    Clojure,
+    CommonLisp,
+    Erlang,
+    FSharp,
+    Fortran,
+    PowerShell,
+    R,
     /// Data / config formats (Tier 0 — no tree-sitter grammar).
     Toml,
     Yaml,
@@ -235,6 +249,19 @@ impl Language {
             "graphql" | "gql" => Self::GraphQl,
             "cmake" => Self::CMake,
             "xml" | "xsl" | "xsd" | "svg" => Self::Xml,
+            "m" | "mm" => Self::ObjectiveC,
+            "pl" | "pm" => Self::Perl,
+            "jl" => Self::Julia,
+            "nix" => Self::Nix,
+            "ml" | "mli" => Self::OCaml,
+            "groovy" => Self::Groovy,
+            "clj" | "cljs" | "cljc" => Self::Clojure,
+            "lisp" | "cl" | "lsp" => Self::CommonLisp,
+            "erl" | "hrl" => Self::Erlang,
+            "fs" | "fsi" | "fsx" => Self::FSharp,
+            "f" | "f90" | "f95" => Self::Fortran,
+            "ps1" | "psm1" => Self::PowerShell,
+            "r" => Self::R,
             "toml" => Self::Toml,
             "yaml" | "yml" => Self::Yaml,
             "json" => Self::Json,
@@ -278,6 +305,19 @@ impl std::fmt::Display for Language {
             Self::CMake => "cmake",
             Self::Dockerfile => "dockerfile",
             Self::Xml => "xml",
+            Self::ObjectiveC => "objectivec",
+            Self::Perl => "perl",
+            Self::Julia => "julia",
+            Self::Nix => "nix",
+            Self::OCaml => "ocaml",
+            Self::Groovy => "groovy",
+            Self::Clojure => "clojure",
+            Self::CommonLisp => "commonlisp",
+            Self::Erlang => "erlang",
+            Self::FSharp => "fsharp",
+            Self::Fortran => "fortran",
+            Self::PowerShell => "powershell",
+            Self::R => "r",
             Self::Toml => "toml",
             Self::Yaml => "yaml",
             Self::Json => "json",
@@ -469,6 +509,104 @@ mod tests {
         assert_eq!(Language::CMake.to_string(), "cmake");
         assert_eq!(Language::Dockerfile.to_string(), "dockerfile");
         assert_eq!(Language::Xml.to_string(), "xml");
+    }
+
+    // ── Tier 2A extension mapping tests ─────────────────────────
+
+    #[test]
+    fn language_from_extension_objectivec() {
+        assert_eq!(Language::from_extension("m"), Language::ObjectiveC);
+        assert_eq!(Language::from_extension("mm"), Language::ObjectiveC);
+    }
+
+    #[test]
+    fn language_from_extension_perl() {
+        assert_eq!(Language::from_extension("pl"), Language::Perl);
+        assert_eq!(Language::from_extension("pm"), Language::Perl);
+    }
+
+    #[test]
+    fn language_from_extension_julia() {
+        assert_eq!(Language::from_extension("jl"), Language::Julia);
+    }
+
+    #[test]
+    fn language_from_extension_nix() {
+        assert_eq!(Language::from_extension("nix"), Language::Nix);
+    }
+
+    #[test]
+    fn language_from_extension_ocaml() {
+        assert_eq!(Language::from_extension("ml"), Language::OCaml);
+        assert_eq!(Language::from_extension("mli"), Language::OCaml);
+    }
+
+    #[test]
+    fn language_from_extension_groovy() {
+        assert_eq!(Language::from_extension("groovy"), Language::Groovy);
+    }
+
+    #[test]
+    fn language_from_extension_clojure() {
+        assert_eq!(Language::from_extension("clj"), Language::Clojure);
+        assert_eq!(Language::from_extension("cljs"), Language::Clojure);
+        assert_eq!(Language::from_extension("cljc"), Language::Clojure);
+    }
+
+    #[test]
+    fn language_from_extension_commonlisp() {
+        assert_eq!(Language::from_extension("lisp"), Language::CommonLisp);
+        assert_eq!(Language::from_extension("cl"), Language::CommonLisp);
+        assert_eq!(Language::from_extension("lsp"), Language::CommonLisp);
+    }
+
+    #[test]
+    fn language_from_extension_erlang() {
+        assert_eq!(Language::from_extension("erl"), Language::Erlang);
+        assert_eq!(Language::from_extension("hrl"), Language::Erlang);
+    }
+
+    #[test]
+    fn language_from_extension_fsharp() {
+        assert_eq!(Language::from_extension("fs"), Language::FSharp);
+        assert_eq!(Language::from_extension("fsi"), Language::FSharp);
+        assert_eq!(Language::from_extension("fsx"), Language::FSharp);
+    }
+
+    #[test]
+    fn language_from_extension_fortran() {
+        assert_eq!(Language::from_extension("f"), Language::Fortran);
+        assert_eq!(Language::from_extension("f90"), Language::Fortran);
+        assert_eq!(Language::from_extension("f95"), Language::Fortran);
+    }
+
+    #[test]
+    fn language_from_extension_powershell() {
+        assert_eq!(Language::from_extension("ps1"), Language::PowerShell);
+        assert_eq!(Language::from_extension("psm1"), Language::PowerShell);
+    }
+
+    #[test]
+    fn language_from_extension_r() {
+        assert_eq!(Language::from_extension("r"), Language::R);
+        assert_eq!(Language::from_extension("R"), Language::R);
+    }
+
+    #[test]
+    fn language_display_tier2a() {
+        assert_eq!(Language::ObjectiveC.to_string(), "objectivec");
+        assert_eq!(Language::Perl.to_string(), "perl");
+        assert_eq!(Language::Julia.to_string(), "julia");
+        assert_eq!(Language::Nix.to_string(), "nix");
+        assert_eq!(Language::OCaml.to_string(), "ocaml");
+        assert_eq!(Language::Groovy.to_string(), "groovy");
+        assert_eq!(Language::Clojure.to_string(), "clojure");
+        assert_eq!(Language::CommonLisp.to_string(), "commonlisp");
+        assert_eq!(Language::Erlang.to_string(), "erlang");
+        assert_eq!(Language::FSharp.to_string(), "fsharp");
+        assert_eq!(Language::Fortran.to_string(), "fortran");
+        assert_eq!(Language::PowerShell.to_string(), "powershell");
+        assert_eq!(Language::R.to_string(), "r");
     }
 
     #[test]

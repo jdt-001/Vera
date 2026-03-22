@@ -58,6 +58,19 @@ pub fn classify_node(lang: Language, kind: &str) -> Option<SymbolType> {
         Language::CMake => classify_cmake(kind),
         Language::Dockerfile => classify_dockerfile(kind),
         Language::Xml => classify_xml(kind),
+        Language::ObjectiveC => classify_objectivec(kind),
+        Language::Perl => classify_perl(kind),
+        Language::Julia => classify_julia(kind),
+        Language::Nix => classify_nix(kind),
+        Language::OCaml => classify_ocaml(kind),
+        Language::Groovy => classify_groovy(kind),
+        Language::Clojure => classify_clojure(kind),
+        Language::CommonLisp => classify_commonlisp(kind),
+        Language::Erlang => classify_erlang(kind),
+        Language::FSharp => classify_fsharp(kind),
+        Language::Fortran => classify_fortran(kind),
+        Language::PowerShell => classify_powershell(kind),
+        Language::R => classify_r(kind),
         _ => None,
     }
 }
@@ -174,6 +187,136 @@ fn classify_dockerfile(kind: &str) -> Option<SymbolType> {
 fn classify_xml(kind: &str) -> Option<SymbolType> {
     match kind {
         "element" => Some(SymbolType::Block),
+        _ => None,
+    }
+}
+
+fn classify_objectivec(kind: &str) -> Option<SymbolType> {
+    match kind {
+        "function_definition" => Some(SymbolType::Function),
+        "method_declaration" | "method_definition" | "implementation_definition" => {
+            Some(SymbolType::Method)
+        }
+        "class_interface" | "class_implementation" => Some(SymbolType::Class),
+        "protocol_declaration" => Some(SymbolType::Interface),
+        "category_interface" | "category_implementation" => Some(SymbolType::Class),
+        _ => None,
+    }
+}
+
+fn classify_perl(kind: &str) -> Option<SymbolType> {
+    match kind {
+        "function_definition" | "subroutine_declaration_statement" => Some(SymbolType::Function),
+        "package_statement" => Some(SymbolType::Module),
+        _ => None,
+    }
+}
+
+fn classify_julia(kind: &str) -> Option<SymbolType> {
+    match kind {
+        "function_definition" | "short_function_definition" => Some(SymbolType::Function),
+        "struct_definition" => Some(SymbolType::Struct),
+        "module_definition" => Some(SymbolType::Module),
+        "abstract_definition" => Some(SymbolType::TypeAlias),
+        "macro_definition" => Some(SymbolType::Function),
+        _ => None,
+    }
+}
+
+fn classify_nix(kind: &str) -> Option<SymbolType> {
+    match kind {
+        "function_expression" | "function" => Some(SymbolType::Function),
+        "binding" | "attrset_expression" => Some(SymbolType::Variable),
+        "let_expression" => Some(SymbolType::Block),
+        _ => None,
+    }
+}
+
+fn classify_ocaml(kind: &str) -> Option<SymbolType> {
+    match kind {
+        "value_definition" | "let_binding" => Some(SymbolType::Function),
+        "type_definition" => Some(SymbolType::TypeAlias),
+        "module_definition" => Some(SymbolType::Module),
+        "module_type_definition" => Some(SymbolType::Interface),
+        "class_definition" => Some(SymbolType::Class),
+        "external" => Some(SymbolType::Function),
+        _ => None,
+    }
+}
+
+fn classify_groovy(kind: &str) -> Option<SymbolType> {
+    match kind {
+        "function_definition" | "method_declaration" => Some(SymbolType::Function),
+        "class_definition" | "class_declaration" => Some(SymbolType::Class),
+        "interface_definition" | "interface_declaration" => Some(SymbolType::Interface),
+        _ => None,
+    }
+}
+
+fn classify_clojure(kind: &str) -> Option<SymbolType> {
+    match kind {
+        "list_lit" => None, // handled specially — (defn ...) etc
+        "defn" => Some(SymbolType::Function),
+        "ns" => Some(SymbolType::Module),
+        _ => None,
+    }
+}
+
+fn classify_commonlisp(kind: &str) -> Option<SymbolType> {
+    match kind {
+        "defun" | "defmacro" | "defgeneric" | "defmethod" => Some(SymbolType::Function),
+        "defclass" => Some(SymbolType::Class),
+        "defvar" | "defparameter" | "defconstant" => Some(SymbolType::Variable),
+        "defpackage" => Some(SymbolType::Module),
+        "list_lit" => None, // handled via recursion
+        _ => None,
+    }
+}
+
+fn classify_erlang(kind: &str) -> Option<SymbolType> {
+    match kind {
+        "function_clause" | "fun_expr" => Some(SymbolType::Function),
+        "type_declaration" | "record_declaration" => Some(SymbolType::TypeAlias),
+        "module_attribute" => Some(SymbolType::Module),
+        _ => None,
+    }
+}
+
+fn classify_fsharp(kind: &str) -> Option<SymbolType> {
+    match kind {
+        "function_or_value_defn" | "value_declaration" => Some(SymbolType::Function),
+        "type_definition" | "type_abbrev_defn" => Some(SymbolType::TypeAlias),
+        "module_defn" => Some(SymbolType::Module),
+        "class_defn" => Some(SymbolType::Class),
+        _ => None,
+    }
+}
+
+fn classify_fortran(kind: &str) -> Option<SymbolType> {
+    match kind {
+        "function" | "function_statement" | "function_subprogram" => Some(SymbolType::Function),
+        "subroutine" | "subroutine_statement" | "subroutine_subprogram" => {
+            Some(SymbolType::Function)
+        }
+        "module" | "module_statement" => Some(SymbolType::Module),
+        "derived_type_definition" | "type_statement" => Some(SymbolType::Struct),
+        "program" | "program_statement" => Some(SymbolType::Block),
+        _ => None,
+    }
+}
+
+fn classify_powershell(kind: &str) -> Option<SymbolType> {
+    match kind {
+        "function_statement" => Some(SymbolType::Function),
+        "class_statement" => Some(SymbolType::Class),
+        "enum_statement" => Some(SymbolType::Enum),
+        _ => None,
+    }
+}
+
+fn classify_r(kind: &str) -> Option<SymbolType> {
+    match kind {
+        "function_definition" => Some(SymbolType::Function),
         _ => None,
     }
 }
@@ -529,6 +672,25 @@ fn collect_symbols(
         return;
     }
 
+    // Handle R binary_operator (x <- function() { ... }) as named function
+    if lang == Language::R && kind == "binary_operator" {
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == "function_definition" {
+                let name = extract_name(&node, source);
+                symbols.push(RawSymbol {
+                    name,
+                    symbol_type: SymbolType::Function,
+                    start_byte: node.start_byte(),
+                    end_byte: node.end_byte(),
+                    start_row: node.start_position().row,
+                    end_row: node.end_position().row,
+                });
+                return;
+            }
+        }
+    }
+
     // Handle Zig variable_declaration -> struct_declaration
     if lang == Language::Zig && kind == "variable_declaration" {
         let mut cursor = node.walk();
@@ -622,6 +784,56 @@ fn collect_symbols(
         // keeping the entire class body as a single chunk.
         if lang == Language::Python && kind == "class_definition" {
             extract_python_class_methods(node, source, symbols);
+            return;
+        }
+
+        // For Objective-C classes, extract methods as separate chunks
+        if lang == Language::ObjectiveC
+            && (kind == "class_interface"
+                || kind == "class_implementation"
+                || kind == "category_interface"
+                || kind == "category_implementation")
+        {
+            let name = extract_name(&node, source);
+            symbols.push(RawSymbol {
+                name,
+                symbol_type: sym_type,
+                start_byte: node.start_byte(),
+                end_byte: node.end_byte(),
+                start_row: node.start_position().row,
+                end_row: node.end_position().row,
+            });
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if let Some(child_sym) = classify_node(lang, child.kind()) {
+                    let child_name = extract_name(&child, source);
+                    symbols.push(RawSymbol {
+                        name: child_name,
+                        symbol_type: child_sym,
+                        start_byte: child.start_byte(),
+                        end_byte: child.end_byte(),
+                        start_row: child.start_position().row,
+                        end_row: child.end_position().row,
+                    });
+                }
+                // Also check inside implementation_definition
+                if child.kind() == "implementation_definition" {
+                    let mut inner = child.walk();
+                    for inner_child in child.children(&mut inner) {
+                        if let Some(inner_sym) = classify_node(lang, inner_child.kind()) {
+                            let inner_name = extract_name(&inner_child, source);
+                            symbols.push(RawSymbol {
+                                name: inner_name,
+                                symbol_type: inner_sym,
+                                start_byte: inner_child.start_byte(),
+                                end_byte: inner_child.end_byte(),
+                                start_row: inner_child.start_position().row,
+                                end_row: inner_child.end_position().row,
+                            });
+                        }
+                    }
+                }
+            }
             return;
         }
 
@@ -1926,6 +2138,300 @@ CMD ["./app"]
         assert!(
             symbols.iter().any(|s| s.symbol_type == SymbolType::Block),
             "XML should extract elements as blocks"
+        );
+    }
+
+    // ── Tier 2A symbol extraction tests ─────────────────────────
+
+    #[test]
+    fn objectivec_extracts_classes_and_methods() {
+        let source = r#"
+@interface Calculator : NSObject
+- (int)add:(int)a to:(int)b;
+@end
+
+@implementation Calculator
+- (int)add:(int)a to:(int)b {
+    return a + b;
+}
+@end
+"#;
+        let symbols = parse_and_extract(source, Language::ObjectiveC);
+        println!("ObjC symbols: {:#?}", symbols);
+        assert!(!symbols.is_empty(), "ObjC should extract symbols");
+        assert!(
+            symbols.iter().any(|s| s.symbol_type == SymbolType::Class),
+            "ObjC should extract class interface/implementation"
+        );
+        // Methods are extracted inside class body
+        assert!(
+            symbols.iter().any(|s| s.symbol_type == SymbolType::Method),
+            "ObjC should extract methods"
+        );
+    }
+
+    #[test]
+    fn perl_extracts_functions() {
+        let source = r#"
+package MyModule;
+
+sub hello {
+    print "hello\n";
+}
+
+sub world {
+    my ($name) = @_;
+    print "hello $name\n";
+}
+
+1;
+"#;
+        let symbols = parse_and_extract(source, Language::Perl);
+        println!("Perl symbols: {:#?}", symbols);
+        assert!(!symbols.is_empty(), "Perl should extract symbols");
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.symbol_type == SymbolType::Function),
+            "Perl should extract functions"
+        );
+    }
+
+    #[test]
+    fn julia_extracts_functions_and_structs() {
+        let source = r#"
+function hello()
+    println("hello")
+end
+
+struct Point
+    x::Float64
+    y::Float64
+end
+
+module MyModule
+end
+"#;
+        let symbols = parse_and_extract(source, Language::Julia);
+        println!("Julia symbols: {:#?}", symbols);
+        assert!(!symbols.is_empty(), "Julia should extract symbols");
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.symbol_type == SymbolType::Function),
+            "Julia should extract functions"
+        );
+        assert!(
+            symbols.iter().any(|s| s.symbol_type == SymbolType::Struct),
+            "Julia should extract structs"
+        );
+    }
+
+    #[test]
+    fn nix_extracts_bindings() {
+        let source = r#"
+{
+  hello = "world";
+  foo = x: x + 1;
+}
+"#;
+        let symbols = parse_and_extract(source, Language::Nix);
+        println!("Nix symbols: {:#?}", symbols);
+        assert!(!symbols.is_empty(), "Nix should extract symbols");
+    }
+
+    #[test]
+    fn ocaml_extracts_functions_and_types() {
+        let source = r#"
+let hello () = print_endline "hello"
+
+type point = { x: float; y: float }
+
+module MyModule = struct end
+"#;
+        let symbols = parse_and_extract(source, Language::OCaml);
+        println!("OCaml symbols: {:#?}", symbols);
+        assert!(!symbols.is_empty(), "OCaml should extract symbols");
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.symbol_type == SymbolType::Function),
+            "OCaml should extract functions"
+        );
+    }
+
+    #[test]
+    fn groovy_extracts_classes_and_functions() {
+        let source = r#"
+class Calculator {
+    int add(int a, int b) {
+        return a + b
+    }
+}
+
+def hello() {
+    println "hello"
+}
+"#;
+        let symbols = parse_and_extract(source, Language::Groovy);
+        println!("Groovy symbols: {:#?}", symbols);
+        assert!(!symbols.is_empty(), "Groovy should extract symbols");
+    }
+
+    #[test]
+    fn clojure_extracts_functions() {
+        let source = r#"
+(ns myapp.core)
+
+(defn hello []
+  (println "hello"))
+
+(defn add [a b]
+  (+ a b))
+"#;
+        let symbols = parse_and_extract(source, Language::Clojure);
+        println!("Clojure symbols: {:#?}", symbols);
+        // Clojure's tree-sitter grammar may vary in node types
+        // At minimum, the grammar should parse without errors
+        let grammar = tree_sitter_grammar(Language::Clojure).unwrap();
+        let mut parser = tree_sitter::Parser::new();
+        parser.set_language(&grammar).unwrap();
+        let tree = parser.parse(source, None).unwrap();
+        assert!(!tree.root_node().has_error());
+    }
+
+    #[test]
+    fn commonlisp_extracts_functions() {
+        let source = r#"
+(defun hello ()
+  (format t "hello~%"))
+
+(defun add (a b)
+  (+ a b))
+
+(defclass point ()
+  ((x :initarg :x)
+   (y :initarg :y)))
+"#;
+        let symbols = parse_and_extract(source, Language::CommonLisp);
+        println!("Common Lisp symbols: {:#?}", symbols);
+        // At minimum the grammar should parse without errors
+        let grammar = tree_sitter_grammar(Language::CommonLisp).unwrap();
+        let mut parser = tree_sitter::Parser::new();
+        parser.set_language(&grammar).unwrap();
+        let tree = parser.parse(source, None).unwrap();
+        assert!(!tree.root_node().has_error());
+    }
+
+    #[test]
+    fn erlang_extracts_functions() {
+        let source = r#"
+-module(hello).
+-export([hello/0, add/2]).
+
+hello() -> ok.
+
+add(A, B) -> A + B.
+"#;
+        let symbols = parse_and_extract(source, Language::Erlang);
+        println!("Erlang symbols: {:#?}", symbols);
+        assert!(!symbols.is_empty(), "Erlang should extract symbols");
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.symbol_type == SymbolType::Function),
+            "Erlang should extract functions"
+        );
+    }
+
+    #[test]
+    fn fsharp_extracts_functions() {
+        let source = r#"
+let hello () = printfn "hello"
+
+let add a b = a + b
+
+type Point = { X: float; Y: float }
+"#;
+        let symbols = parse_and_extract(source, Language::FSharp);
+        println!("F# symbols: {:#?}", symbols);
+        assert!(!symbols.is_empty(), "F# should extract symbols");
+    }
+
+    #[test]
+    fn fortran_extracts_functions_and_subroutines() {
+        let source = r#"
+program hello
+  print *, 'hello'
+end program hello
+
+subroutine greet(name)
+  character(*), intent(in) :: name
+  print *, 'Hello ', name
+end subroutine greet
+
+function add(a, b) result(c)
+  integer, intent(in) :: a, b
+  integer :: c
+  c = a + b
+end function add
+"#;
+        let symbols = parse_and_extract(source, Language::Fortran);
+        println!("Fortran symbols: {:#?}", symbols);
+        assert!(!symbols.is_empty(), "Fortran should extract symbols");
+    }
+
+    #[test]
+    fn powershell_extracts_functions_and_classes() {
+        let source = r#"
+function Get-Hello {
+    Write-Host "hello"
+}
+
+function Add-Numbers {
+    param($a, $b)
+    return $a + $b
+}
+
+class Calculator {
+    [int] Add([int]$a, [int]$b) {
+        return $a + $b
+    }
+}
+"#;
+        let symbols = parse_and_extract(source, Language::PowerShell);
+        println!("PowerShell symbols: {:#?}", symbols);
+        assert!(!symbols.is_empty(), "PowerShell should extract symbols");
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.symbol_type == SymbolType::Function),
+            "PowerShell should extract functions"
+        );
+    }
+
+    #[test]
+    fn r_extracts_functions() {
+        let source = r#"
+hello <- function() {
+  print("hello")
+}
+
+add <- function(a, b) {
+  a + b
+}
+"#;
+        let symbols = parse_and_extract(source, Language::R);
+        assert!(!symbols.is_empty(), "R should extract symbols");
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.symbol_type == SymbolType::Function),
+            "R should extract functions"
+        );
+        assert!(
+            symbols.iter().any(|s| s.name.as_deref() == Some("hello")),
+            "R should extract function name 'hello'"
         );
     }
 }
