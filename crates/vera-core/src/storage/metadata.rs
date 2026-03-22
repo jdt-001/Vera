@@ -335,37 +335,9 @@ fn row_to_chunk(row: &rusqlite::Row<'_>) -> Result<Chunk> {
 }
 
 /// Parse a language string back into the enum.
+/// Delegates to `Language::from_str()` to stay in sync with the `Display` impl.
 fn parse_language(s: &str) -> Language {
-    match s {
-        "rust" => Language::Rust,
-        "typescript" => Language::TypeScript,
-        "javascript" => Language::JavaScript,
-        "python" => Language::Python,
-        "go" => Language::Go,
-        "java" => Language::Java,
-        "c" => Language::C,
-        "cpp" => Language::Cpp,
-        "ruby" => Language::Ruby,
-        "swift" => Language::Swift,
-        "kotlin" => Language::Kotlin,
-        "scala" => Language::Scala,
-        "zig" => Language::Zig,
-        "lua" => Language::Lua,
-        "bash" => Language::Bash,
-        "toml" => Language::Toml,
-        "yaml" => Language::Yaml,
-        "json" => Language::Json,
-        "markdown" => Language::Markdown,
-        "csharp" => Language::CSharp,
-        "php" => Language::Php,
-        "haskell" => Language::Haskell,
-        "elixir" => Language::Elixir,
-        "dart" => Language::Dart,
-        "sql" => Language::Sql,
-        "hcl" => Language::Hcl,
-        "protobuf" => Language::Protobuf,
-        _ => Language::Unknown,
-    }
+    s.parse::<Language>().unwrap_or(Language::Unknown)
 }
 
 /// Parse a symbol type string back into the enum.
@@ -562,7 +534,23 @@ mod tests {
 
     #[test]
     fn parse_language_roundtrip() {
-        let langs = vec![
+        // Exhaustive list of ALL Language variants to catch future additions.
+        let all_langs = vec![
+            Language::Rust,
+            Language::TypeScript,
+            Language::JavaScript,
+            Language::Python,
+            Language::Go,
+            Language::Java,
+            Language::C,
+            Language::Cpp,
+            Language::Ruby,
+            Language::Swift,
+            Language::Kotlin,
+            Language::Scala,
+            Language::Zig,
+            Language::Lua,
+            Language::Bash,
             Language::CSharp,
             Language::Php,
             Language::Haskell,
@@ -571,13 +559,63 @@ mod tests {
             Language::Sql,
             Language::Hcl,
             Language::Protobuf,
-            Language::Rust,
-            Language::Scala,
-            Language::Python,
+            // Tier 1B
+            Language::Html,
+            Language::Css,
+            Language::Scss,
+            Language::Vue,
+            Language::GraphQl,
+            Language::CMake,
+            Language::Dockerfile,
+            Language::Xml,
+            // Tier 2A
+            Language::ObjectiveC,
+            Language::Perl,
+            Language::Julia,
+            Language::Nix,
+            Language::OCaml,
+            Language::Groovy,
+            Language::Clojure,
+            Language::CommonLisp,
+            Language::Erlang,
+            Language::FSharp,
+            Language::Fortran,
+            Language::PowerShell,
+            Language::R,
+            // Tier 2A batch 2
+            Language::Matlab,
+            Language::DLang,
+            Language::Fish,
+            Language::Zsh,
+            Language::Luau,
+            Language::Scheme,
+            Language::Racket,
+            Language::Elm,
+            Language::Glsl,
+            Language::Hlsl,
+            // Tier 2B
+            Language::Svelte,
+            Language::Astro,
+            Language::Makefile,
+            Language::Ini,
+            Language::Nginx,
+            Language::Prisma,
+            // Tier 0
+            Language::Toml,
+            Language::Yaml,
+            Language::Json,
+            Language::Markdown,
+            Language::Unknown,
         ];
-        for lang in langs {
+        for lang in &all_langs {
             let s = lang.to_string();
-            assert_eq!(parse_language(&s), lang, "Failed roundtrip for {}", s);
+            assert_eq!(parse_language(&s), *lang, "Failed roundtrip for {s}");
         }
+    }
+
+    #[test]
+    fn parse_language_unknown_input() {
+        assert_eq!(parse_language("nonexistent"), Language::Unknown);
+        assert_eq!(parse_language(""), Language::Unknown);
     }
 }

@@ -379,6 +379,83 @@ impl std::fmt::Display for Language {
     }
 }
 
+impl std::str::FromStr for Language {
+    type Err = ();
+
+    /// Parse a language string (as produced by `Display`) back into the enum.
+    /// Returns `Language::Unknown` on unrecognized input (via `Err(())`).
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "rust" => Ok(Self::Rust),
+            "typescript" => Ok(Self::TypeScript),
+            "javascript" => Ok(Self::JavaScript),
+            "python" => Ok(Self::Python),
+            "go" => Ok(Self::Go),
+            "java" => Ok(Self::Java),
+            "c" => Ok(Self::C),
+            "cpp" => Ok(Self::Cpp),
+            "ruby" => Ok(Self::Ruby),
+            "swift" => Ok(Self::Swift),
+            "kotlin" => Ok(Self::Kotlin),
+            "scala" => Ok(Self::Scala),
+            "zig" => Ok(Self::Zig),
+            "lua" => Ok(Self::Lua),
+            "bash" => Ok(Self::Bash),
+            "csharp" => Ok(Self::CSharp),
+            "php" => Ok(Self::Php),
+            "haskell" => Ok(Self::Haskell),
+            "elixir" => Ok(Self::Elixir),
+            "dart" => Ok(Self::Dart),
+            "sql" => Ok(Self::Sql),
+            "hcl" => Ok(Self::Hcl),
+            "protobuf" => Ok(Self::Protobuf),
+            "html" => Ok(Self::Html),
+            "css" => Ok(Self::Css),
+            "scss" => Ok(Self::Scss),
+            "vue" => Ok(Self::Vue),
+            "graphql" => Ok(Self::GraphQl),
+            "cmake" => Ok(Self::CMake),
+            "dockerfile" => Ok(Self::Dockerfile),
+            "xml" => Ok(Self::Xml),
+            "objectivec" => Ok(Self::ObjectiveC),
+            "perl" => Ok(Self::Perl),
+            "julia" => Ok(Self::Julia),
+            "nix" => Ok(Self::Nix),
+            "ocaml" => Ok(Self::OCaml),
+            "groovy" => Ok(Self::Groovy),
+            "clojure" => Ok(Self::Clojure),
+            "commonlisp" => Ok(Self::CommonLisp),
+            "erlang" => Ok(Self::Erlang),
+            "fsharp" => Ok(Self::FSharp),
+            "fortran" => Ok(Self::Fortran),
+            "powershell" => Ok(Self::PowerShell),
+            "r" => Ok(Self::R),
+            "matlab" => Ok(Self::Matlab),
+            "d" => Ok(Self::DLang),
+            "fish" => Ok(Self::Fish),
+            "zsh" => Ok(Self::Zsh),
+            "luau" => Ok(Self::Luau),
+            "scheme" => Ok(Self::Scheme),
+            "racket" => Ok(Self::Racket),
+            "elm" => Ok(Self::Elm),
+            "glsl" => Ok(Self::Glsl),
+            "hlsl" => Ok(Self::Hlsl),
+            "svelte" => Ok(Self::Svelte),
+            "astro" => Ok(Self::Astro),
+            "makefile" => Ok(Self::Makefile),
+            "ini" => Ok(Self::Ini),
+            "nginx" => Ok(Self::Nginx),
+            "prisma" => Ok(Self::Prisma),
+            "toml" => Ok(Self::Toml),
+            "yaml" => Ok(Self::Yaml),
+            "json" => Ok(Self::Json),
+            "markdown" => Ok(Self::Markdown),
+            "unknown" => Ok(Self::Unknown),
+            _ => Err(()),
+        }
+    }
+}
+
 /// Type of symbol extracted from source code.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
