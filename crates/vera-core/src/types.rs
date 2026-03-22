@@ -174,7 +174,16 @@ pub enum Language {
     Sql,
     Hcl,
     Protobuf,
-    /// Structural / config formats (Tier 1B).
+    /// Structural / config / web formats (Tier 1B).
+    Html,
+    Css,
+    Scss,
+    Vue,
+    GraphQl,
+    CMake,
+    Dockerfile,
+    Xml,
+    /// Data / config formats (Tier 0 — no tree-sitter grammar).
     Toml,
     Yaml,
     Json,
@@ -184,6 +193,15 @@ pub enum Language {
 }
 
 impl Language {
+    /// Detect language from a full filename (for extensionless files like Dockerfile, CMakeLists.txt).
+    pub fn from_filename(name: &str) -> Option<Self> {
+        match name {
+            "Dockerfile" | "dockerfile" => Some(Self::Dockerfile),
+            "CMakeLists.txt" => Some(Self::CMake),
+            _ => None,
+        }
+    }
+
     /// Detect language from a file extension.
     pub fn from_extension(ext: &str) -> Self {
         match ext.to_lowercase().as_str() {
@@ -210,6 +228,13 @@ impl Language {
             "sql" => Self::Sql,
             "tf" | "hcl" => Self::Hcl,
             "proto" => Self::Protobuf,
+            "html" | "htm" => Self::Html,
+            "css" => Self::Css,
+            "scss" => Self::Scss,
+            "vue" => Self::Vue,
+            "graphql" | "gql" => Self::GraphQl,
+            "cmake" => Self::CMake,
+            "xml" | "xsl" | "xsd" | "svg" => Self::Xml,
             "toml" => Self::Toml,
             "yaml" | "yml" => Self::Yaml,
             "json" => Self::Json,
@@ -245,6 +270,14 @@ impl std::fmt::Display for Language {
             Self::Sql => "sql",
             Self::Hcl => "hcl",
             Self::Protobuf => "protobuf",
+            Self::Html => "html",
+            Self::Css => "css",
+            Self::Scss => "scss",
+            Self::Vue => "vue",
+            Self::GraphQl => "graphql",
+            Self::CMake => "cmake",
+            Self::Dockerfile => "dockerfile",
+            Self::Xml => "xml",
             Self::Toml => "toml",
             Self::Yaml => "yaml",
             Self::Json => "json",
@@ -351,11 +384,91 @@ mod tests {
         assert_eq!(Language::from_extension("Py"), Language::Python);
     }
 
+    // ── Tier 1B extension mapping tests ─────────────────────────
+
+    #[test]
+    fn language_from_extension_html() {
+        assert_eq!(Language::from_extension("html"), Language::Html);
+        assert_eq!(Language::from_extension("htm"), Language::Html);
+    }
+
+    #[test]
+    fn language_from_extension_css() {
+        assert_eq!(Language::from_extension("css"), Language::Css);
+    }
+
+    #[test]
+    fn language_from_extension_scss() {
+        assert_eq!(Language::from_extension("scss"), Language::Scss);
+    }
+
+    #[test]
+    fn language_from_extension_vue() {
+        assert_eq!(Language::from_extension("vue"), Language::Vue);
+    }
+
+    #[test]
+    fn language_from_extension_graphql() {
+        assert_eq!(Language::from_extension("graphql"), Language::GraphQl);
+        assert_eq!(Language::from_extension("gql"), Language::GraphQl);
+    }
+
+    #[test]
+    fn language_from_extension_cmake() {
+        assert_eq!(Language::from_extension("cmake"), Language::CMake);
+    }
+
+    #[test]
+    fn language_from_extension_xml() {
+        assert_eq!(Language::from_extension("xml"), Language::Xml);
+        assert_eq!(Language::from_extension("xsl"), Language::Xml);
+        assert_eq!(Language::from_extension("xsd"), Language::Xml);
+        assert_eq!(Language::from_extension("svg"), Language::Xml);
+    }
+
+    #[test]
+    fn language_from_filename_dockerfile() {
+        assert_eq!(
+            Language::from_filename("Dockerfile"),
+            Some(Language::Dockerfile)
+        );
+        assert_eq!(
+            Language::from_filename("dockerfile"),
+            Some(Language::Dockerfile)
+        );
+    }
+
+    #[test]
+    fn language_from_filename_cmakelists() {
+        assert_eq!(
+            Language::from_filename("CMakeLists.txt"),
+            Some(Language::CMake)
+        );
+    }
+
+    #[test]
+    fn language_from_filename_unknown() {
+        assert_eq!(Language::from_filename("main.rs"), None);
+        assert_eq!(Language::from_filename("README.md"), None);
+    }
+
     #[test]
     fn language_display() {
         assert_eq!(Language::Rust.to_string(), "rust");
         assert_eq!(Language::TypeScript.to_string(), "typescript");
         assert_eq!(Language::Unknown.to_string(), "unknown");
+    }
+
+    #[test]
+    fn language_display_tier1b() {
+        assert_eq!(Language::Html.to_string(), "html");
+        assert_eq!(Language::Css.to_string(), "css");
+        assert_eq!(Language::Scss.to_string(), "scss");
+        assert_eq!(Language::Vue.to_string(), "vue");
+        assert_eq!(Language::GraphQl.to_string(), "graphql");
+        assert_eq!(Language::CMake.to_string(), "cmake");
+        assert_eq!(Language::Dockerfile.to_string(), "dockerfile");
+        assert_eq!(Language::Xml.to_string(), "xml");
     }
 
     #[test]

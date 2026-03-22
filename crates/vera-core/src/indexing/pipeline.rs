@@ -235,12 +235,19 @@ fn parse_discovered_files_parallel(
 
             let hash = content_hash(&source);
 
-            let ext = file
+            let language = file
                 .absolute_path
-                .extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("");
-            let language = Language::from_extension(ext);
+                .file_name()
+                .and_then(|n| n.to_str())
+                .and_then(Language::from_filename)
+                .unwrap_or_else(|| {
+                    let ext = file
+                        .absolute_path
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .unwrap_or("");
+                    Language::from_extension(ext)
+                });
 
             parsing::parse_and_chunk(&source, &file.relative_path, language, &config.indexing)
                 .inspect(|chunks| {

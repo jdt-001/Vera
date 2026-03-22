@@ -51,6 +51,14 @@ tree-sitter-haskell = "0.23.1"
 tree-sitter-elixir = "0.3.5"
 tree-sitter-dart = "0.1.0"
 tree-sitter-hcl = { git = "https://github.com/tree-sitter-grammars/tree-sitter-hcl", version = "1.2.0" }
+tree-sitter-html = "0.23.2"
+tree-sitter-css = "0.25.0"
+tree-sitter-scss = "1.0.0"
+# Vue: vendored C source in crates/tree-sitter-vue/ (crates.io 0.0.3 needs tree-sitter ~0.20, git needs tree-sitter-language)
+tree-sitter-graphql = "0.1.0"
+tree-sitter-cmake = "0.7.1"
+# Dockerfile: vendored C source in crates/tree-sitter-dockerfile/ (crates.io 0.2.0 needs tree-sitter ^0.20)
+tree-sitter-xml = "0.7.0"
 ort = { version = "=2.0.0-rc.11", default-features = false, features = ["ndarray", "load-dynamic"] }
 tokenizers = { version = "0.22.2" }
 dirs = "6.0.0"

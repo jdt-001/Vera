@@ -238,11 +238,17 @@ pub async fn update_repository<P: EmbeddingProvider>(
         // Parse and chunk new/modified files.
         let mut all_chunks = Vec::new();
         for (rel_path, content, _hash) in &files_to_index {
-            let ext = Path::new(rel_path)
-                .extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("");
-            let language = Language::from_extension(ext);
+            let language = Path::new(rel_path)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .and_then(Language::from_filename)
+                .unwrap_or_else(|| {
+                    let ext = Path::new(rel_path)
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .unwrap_or("");
+                    Language::from_extension(ext)
+                });
 
             match parsing::parse_and_chunk(content, rel_path, language, &config.indexing) {
                 Ok(chunks) => {

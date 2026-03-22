@@ -50,6 +50,14 @@ pub fn classify_node(lang: Language, kind: &str) -> Option<SymbolType> {
         Language::Sql => classify_sql(kind),
         Language::Hcl => classify_hcl(kind),
         Language::Protobuf => classify_protobuf(kind),
+        Language::Html => classify_html(kind),
+        Language::Css => classify_css(kind),
+        Language::Scss => classify_scss(kind),
+        Language::Vue => classify_vue(kind),
+        Language::GraphQl => classify_graphql(kind),
+        Language::CMake => classify_cmake(kind),
+        Language::Dockerfile => classify_dockerfile(kind),
+        Language::Xml => classify_xml(kind),
         _ => None,
     }
 }
@@ -82,6 +90,90 @@ fn classify_protobuf(kind: &str) -> Option<SymbolType> {
         "enum" | "enum_definition" => Some(SymbolType::Enum),
         "service" | "service_definition" => Some(SymbolType::Class),
         "rpc" | "rpc_definition" | "rpc_declaration" => Some(SymbolType::Method),
+        _ => None,
+    }
+}
+
+fn classify_html(kind: &str) -> Option<SymbolType> {
+    match kind {
+        "element" | "script_element" | "style_element" => Some(SymbolType::Block),
+        _ => None,
+    }
+}
+
+fn classify_css(kind: &str) -> Option<SymbolType> {
+    match kind {
+        "rule_set" => Some(SymbolType::Block),
+        "media_statement" => Some(SymbolType::Block),
+        "keyframes_statement" => Some(SymbolType::Block),
+        "import_statement" => Some(SymbolType::Variable),
+        _ => None,
+    }
+}
+
+fn classify_scss(kind: &str) -> Option<SymbolType> {
+    match kind {
+        "rule_set" => Some(SymbolType::Block),
+        "mixin_statement" => Some(SymbolType::Function),
+        "function_statement" => Some(SymbolType::Function),
+        "include_statement" => Some(SymbolType::Variable),
+        "media_statement" => Some(SymbolType::Block),
+        "keyframes_statement" => Some(SymbolType::Block),
+        _ => None,
+    }
+}
+
+fn classify_vue(kind: &str) -> Option<SymbolType> {
+    match kind {
+        "template_element" => Some(SymbolType::Block),
+        "script_element" => Some(SymbolType::Block),
+        "style_element" => Some(SymbolType::Block),
+        _ => None,
+    }
+}
+
+fn classify_graphql(kind: &str) -> Option<SymbolType> {
+    match kind {
+        "object_type_definition" | "input_object_type_definition" => Some(SymbolType::Struct),
+        "interface_type_definition" => Some(SymbolType::Interface),
+        "enum_type_definition" => Some(SymbolType::Enum),
+        "union_type_definition" => Some(SymbolType::TypeAlias),
+        "scalar_type_definition" => Some(SymbolType::TypeAlias),
+        "schema_definition" => Some(SymbolType::Block),
+        "operation_definition" => Some(SymbolType::Function),
+        "fragment_definition" => Some(SymbolType::Function),
+        "directive_definition" => Some(SymbolType::Function),
+        _ => None,
+    }
+}
+
+fn classify_cmake(kind: &str) -> Option<SymbolType> {
+    match kind {
+        "function_def" | "macro_def" => Some(SymbolType::Function),
+        "if_condition" | "foreach_loop" | "while_loop" => Some(SymbolType::Block),
+        "normal_command" => Some(SymbolType::Variable),
+        _ => None,
+    }
+}
+
+fn classify_dockerfile(kind: &str) -> Option<SymbolType> {
+    match kind {
+        "from_instruction" => Some(SymbolType::Block),
+        "run_instruction" => Some(SymbolType::Block),
+        "copy_instruction" | "add_instruction" => Some(SymbolType::Variable),
+        "cmd_instruction" | "entrypoint_instruction" => Some(SymbolType::Function),
+        "env_instruction" | "arg_instruction" | "label_instruction" => Some(SymbolType::Constant),
+        "expose_instruction" => Some(SymbolType::Variable),
+        "workdir_instruction" | "user_instruction" | "volume_instruction" => {
+            Some(SymbolType::Variable)
+        }
+        _ => None,
+    }
+}
+
+fn classify_xml(kind: &str) -> Option<SymbolType> {
+    match kind {
+        "element" => Some(SymbolType::Block),
         _ => None,
     }
 }
@@ -398,10 +490,12 @@ pub fn extract_symbols(tree: &tree_sitter::Tree, source: &[u8], lang: Language) 
 /// Recursively collect symbols from AST nodes.
 ///
 /// `depth` limits how deep we recurse to avoid extracting deeply nested items
-/// as top-level symbols. We go up to depth 3 to handle patterns like:
+/// as top-level symbols. We go up to depth 6 to handle patterns like:
 /// - export_statement > function_declaration (TS/JS)
 /// - decorated_definition > function_definition (Python)
 /// - impl_item > function_item (Rust methods)
+/// - source_file > document > definition > type_system_definition >
+///   type_definition > object_type_definition (GraphQL)
 fn collect_symbols(
     node: tree_sitter::Node<'_>,
     source: &[u8],
@@ -409,7 +503,7 @@ fn collect_symbols(
     symbols: &mut Vec<RawSymbol>,
     depth: usize,
 ) {
-    if depth > 4 {
+    if depth > 6 {
         return;
     }
 
@@ -1612,6 +1706,226 @@ service AuthService { rpc Login(User) returns (User); }
             symbols
                 .iter()
                 .any(|s| s.symbol_type == SymbolType::Method && s.name.as_deref() == Some("Login"))
+        );
+    }
+
+    // ── Tier 1B symbol extraction tests ─────────────────────────
+
+    #[test]
+    fn html_extracts_elements() {
+        let source = r#"
+<html>
+<head><title>Test</title></head>
+<body>
+  <div class="container">
+    <p>Hello</p>
+  </div>
+  <script>console.log("hi")</script>
+  <style>body { color: red; }</style>
+</body>
+</html>
+"#;
+        let symbols = parse_and_extract(source, Language::Html);
+        assert!(!symbols.is_empty(), "HTML should extract some symbols");
+        assert!(
+            symbols.iter().any(|s| s.symbol_type == SymbolType::Block),
+            "HTML should extract block symbols"
+        );
+    }
+
+    #[test]
+    fn css_extracts_rules() {
+        let source = r#"
+body {
+    color: red;
+    font-size: 16px;
+}
+
+.container {
+    max-width: 1200px;
+}
+
+@media (max-width: 768px) {
+    body { font-size: 14px; }
+}
+"#;
+        let symbols = parse_and_extract(source, Language::Css);
+        assert!(!symbols.is_empty(), "CSS should extract some symbols");
+        assert!(
+            symbols.iter().any(|s| s.symbol_type == SymbolType::Block),
+            "CSS should extract rule_set blocks"
+        );
+    }
+
+    #[test]
+    fn scss_extracts_mixins_and_rules() {
+        let source = r#"
+$primary: #333;
+
+@mixin flex-center {
+    display: flex;
+    align-items: center;
+}
+
+.container {
+    @include flex-center;
+    color: $primary;
+}
+"#;
+        let symbols = parse_and_extract(source, Language::Scss);
+        assert!(!symbols.is_empty(), "SCSS should extract some symbols");
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.symbol_type == SymbolType::Function),
+            "SCSS should extract mixin as function"
+        );
+        assert!(
+            symbols.iter().any(|s| s.symbol_type == SymbolType::Block),
+            "SCSS should extract rule_set blocks"
+        );
+    }
+
+    #[test]
+    fn vue_extracts_sections() {
+        let source = r#"
+<template>
+  <div>{{ message }}</div>
+</template>
+
+<script>
+export default {
+  data() { return { message: "Hello" } }
+}
+</script>
+
+<style>
+.container { color: red; }
+</style>
+"#;
+        let symbols = parse_and_extract(source, Language::Vue);
+        assert!(!symbols.is_empty(), "Vue should extract some symbols");
+        assert!(
+            symbols.iter().any(|s| s.symbol_type == SymbolType::Block),
+            "Vue should extract template/script/style blocks"
+        );
+    }
+
+    #[test]
+    fn graphql_extracts_types_and_queries() {
+        let source = r#"
+type User {
+    id: ID!
+    name: String!
+    email: String
+}
+
+enum Role {
+    ADMIN
+    USER
+    GUEST
+}
+
+interface Node {
+    id: ID!
+}
+
+input CreateUserInput {
+    name: String!
+    email: String!
+}
+
+query GetUser($id: ID!) {
+    user(id: $id) {
+        name
+        email
+    }
+}
+"#;
+        let symbols = parse_and_extract(source, Language::GraphQl);
+        assert!(!symbols.is_empty(), "GraphQL should extract symbols");
+        assert!(
+            symbols.iter().any(|s| s.symbol_type == SymbolType::Struct),
+            "GraphQL should extract type as struct"
+        );
+        assert!(
+            symbols.iter().any(|s| s.symbol_type == SymbolType::Enum),
+            "GraphQL should extract enum"
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.symbol_type == SymbolType::Interface),
+            "GraphQL should extract interface"
+        );
+    }
+
+    #[test]
+    fn cmake_extracts_functions_and_commands() {
+        let source = r#"
+cmake_minimum_required(VERSION 3.10)
+project(MyProject)
+
+function(my_helper ARG)
+    message(STATUS "${ARG}")
+endfunction()
+
+macro(my_macro)
+    set(MY_VAR "value")
+endmacro()
+
+add_executable(main src/main.cpp)
+"#;
+        let symbols = parse_and_extract(source, Language::CMake);
+        assert!(!symbols.is_empty(), "CMake should extract symbols");
+    }
+
+    #[test]
+    fn dockerfile_extracts_instructions() {
+        let source = r#"FROM ubuntu:20.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ARG BUILD_VERSION=1.0
+
+RUN apt-get update && apt-get install -y curl
+
+COPY . /app
+WORKDIR /app
+
+CMD ["./app"]
+"#;
+        let symbols = parse_and_extract(source, Language::Dockerfile);
+        assert!(!symbols.is_empty(), "Dockerfile should extract symbols");
+        assert!(
+            symbols.iter().any(|s| s.symbol_type == SymbolType::Block),
+            "Dockerfile should extract FROM as block"
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.symbol_type == SymbolType::Constant),
+            "Dockerfile should extract ENV/ARG as constant"
+        );
+    }
+
+    #[test]
+    fn xml_extracts_elements() {
+        let source = r#"<?xml version="1.0" encoding="UTF-8"?>
+<project>
+    <name>MyProject</name>
+    <dependencies>
+        <dependency>
+            <groupId>com.example</groupId>
+            <artifactId>lib</artifactId>
+        </dependency>
+    </dependencies>
+</project>
+"#;
+        let symbols = parse_and_extract(source, Language::Xml);
+        assert!(!symbols.is_empty(), "XML should extract some symbols");
+        assert!(
+            symbols.iter().any(|s| s.symbol_type == SymbolType::Block),
+            "XML should extract elements as blocks"
         );
     }
 }

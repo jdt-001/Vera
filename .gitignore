@@ -5,6 +5,10 @@ target/
 spikes/*/Cargo.lock
 spikes/*/node_modules/
 
+# Vendored tree-sitter grammars (downloaded by .factory/init.sh)
+crates/tree-sitter-vue/
+crates/tree-sitter-dockerfile/
+
 # Development files
 .factory/
 .agents/

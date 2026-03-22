@@ -2947,10 +2947,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "tree-sitter-cmake"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c1b35d1dd7396d24b3e826bb0f975b915ec7e9125b989d5e9d24ebb6a08509a"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
 name = "tree-sitter-cpp"
 version = "0.23.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df2196ea9d47b4ab4a31b9297eaa5a5d19a0b121dceb9f118f6790ad0ab94743"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
+name = "tree-sitter-css"
+version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a5cbc5e18f29a2c6d6435891f42569525cf95435a3e01c2f1947abcde178686f"
 dependencies = [
  "cc",
  "tree-sitter-language",
@@ -2987,6 +3007,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tree-sitter-graphql"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "efedc4cac157161cc23a0adc4553a2cedc908e1cd754b6cd033a919bb81ce5d6"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
 name = "tree-sitter-haskell"
 version = "0.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3000,6 +3030,16 @@ dependencies = [
 name = "tree-sitter-hcl"
 version = "1.2.0"
 source = "git+https://github.com/tree-sitter-grammars/tree-sitter-hcl#64ad62785d442eb4d45df3a1764962dafd5bc98b"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
+name = "tree-sitter-html"
+version = "0.23.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "261b708e5d92061ede329babaaa427b819329a9d427a1d710abb0f67bbef63ee"
 dependencies = [
  "cc",
  "tree-sitter-language",
@@ -3102,6 +3142,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tree-sitter-scss"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "33909a9ca86390ebbf3461e9949c4bbe2767d2d024b486306d27616641d4ba24"
+dependencies = [
+ "cc",
+ "tree-sitter",
+]
+
+[[package]]
 name = "tree-sitter-swift"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3116,6 +3166,16 @@ name = "tree-sitter-typescript"
 version = "0.23.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c5f76ed8d947a75cc446d5fccd8b602ebf0cde64ccf2ffa434d873d7a575eff"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
+name = "tree-sitter-xml"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e670041f591d994f54d597ddcd8f4ebc930e282c4c76a42268743b71f0c8b6b3"
 dependencies = [
  "cc",
  "tree-sitter-language",
@@ -3293,12 +3353,16 @@ dependencies = [
  "tree-sitter-bash",
  "tree-sitter-c",
  "tree-sitter-c-sharp",
+ "tree-sitter-cmake",
  "tree-sitter-cpp",
+ "tree-sitter-css",
  "tree-sitter-dart",
  "tree-sitter-elixir",
  "tree-sitter-go",
+ "tree-sitter-graphql",
  "tree-sitter-haskell",
  "tree-sitter-hcl",
+ "tree-sitter-html",
  "tree-sitter-java",
  "tree-sitter-javascript",
  "tree-sitter-kotlin-sg",
@@ -3309,8 +3373,10 @@ dependencies = [
  "tree-sitter-ruby",
  "tree-sitter-rust",
  "tree-sitter-scala",
+ "tree-sitter-scss",
  "tree-sitter-swift",
  "tree-sitter-typescript",
+ "tree-sitter-xml",
  "tree-sitter-zig",
  "zerocopy",
 ]

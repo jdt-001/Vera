@@ -13,6 +13,8 @@ unsafe extern "C" {
     fn tree_sitter_sql() -> *const ();
     fn tree_sitter_hcl() -> *const ();
     fn tree_sitter_proto() -> *const ();
+    fn tree_sitter_vue() -> *const ();
+    fn tree_sitter_dockerfile() -> *const ();
 }
 
 /// Returns the tree-sitter grammar for a given language, if supported.
@@ -45,6 +47,16 @@ pub fn tree_sitter_grammar(lang: Language) -> Option<TsLanguage> {
         Language::Protobuf => unsafe {
             std::mem::transmute::<*const (), TsLanguage>(tree_sitter_proto())
         },
+        Language::Html => tree_sitter_html::LANGUAGE.into(),
+        Language::Css => tree_sitter_css::LANGUAGE.into(),
+        Language::Scss => tree_sitter_scss::language(),
+        Language::Vue => unsafe { std::mem::transmute::<*const (), TsLanguage>(tree_sitter_vue()) },
+        Language::GraphQl => tree_sitter_graphql::LANGUAGE.into(),
+        Language::CMake => tree_sitter_cmake::LANGUAGE.into(),
+        Language::Dockerfile => unsafe {
+            std::mem::transmute::<*const (), TsLanguage>(tree_sitter_dockerfile())
+        },
+        Language::Xml => tree_sitter_xml::LANGUAGE_XML.into(),
         // Languages without tree-sitter grammar support → Tier 0 fallback
         Language::Toml
         | Language::Yaml
@@ -100,6 +112,26 @@ mod tests {
     }
 
     #[test]
+    fn tier_1b_languages_have_grammars() {
+        let tier_1b = [
+            Language::Html,
+            Language::Css,
+            Language::Scss,
+            Language::Vue,
+            Language::GraphQl,
+            Language::CMake,
+            Language::Dockerfile,
+            Language::Xml,
+        ];
+        for lang in tier_1b {
+            assert!(
+                has_grammar(lang),
+                "{lang} should have a tree-sitter grammar"
+            );
+        }
+    }
+
+    #[test]
     fn tier_0_languages_have_no_grammar() {
         let tier_0 = [
             Language::Unknown,
@@ -121,5 +153,101 @@ mod tests {
         let grammar = tree_sitter_grammar(Language::Rust).unwrap();
         let mut parser = tree_sitter::Parser::new();
         parser.set_language(&grammar).expect("grammar should load");
+    }
+
+    #[test]
+    fn html_grammar_creates_valid_parser() {
+        let grammar = tree_sitter_grammar(Language::Html).unwrap();
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&grammar)
+            .expect("HTML grammar should load");
+        let tree = parser.parse("<div></div>", None).unwrap();
+        assert!(!tree.root_node().has_error());
+    }
+
+    #[test]
+    fn css_grammar_creates_valid_parser() {
+        let grammar = tree_sitter_grammar(Language::Css).unwrap();
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&grammar)
+            .expect("CSS grammar should load");
+        let tree = parser.parse("body { color: red; }", None).unwrap();
+        assert!(!tree.root_node().has_error());
+    }
+
+    #[test]
+    fn scss_grammar_creates_valid_parser() {
+        let grammar = tree_sitter_grammar(Language::Scss).unwrap();
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&grammar)
+            .expect("SCSS grammar should load");
+        let tree = parser
+            .parse("$color: red; body { color: $color; }", None)
+            .unwrap();
+        assert!(!tree.root_node().has_error());
+    }
+
+    #[test]
+    fn vue_grammar_creates_valid_parser() {
+        let grammar = tree_sitter_grammar(Language::Vue).unwrap();
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&grammar)
+            .expect("Vue grammar should load");
+        let tree = parser
+            .parse("<template><div></div></template>", None)
+            .unwrap();
+        assert!(!tree.root_node().has_error());
+    }
+
+    #[test]
+    fn graphql_grammar_creates_valid_parser() {
+        let grammar = tree_sitter_grammar(Language::GraphQl).unwrap();
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&grammar)
+            .expect("GraphQL grammar should load");
+        let tree = parser.parse("type Query { hello: String }", None).unwrap();
+        assert!(!tree.root_node().has_error());
+    }
+
+    #[test]
+    fn cmake_grammar_creates_valid_parser() {
+        let grammar = tree_sitter_grammar(Language::CMake).unwrap();
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&grammar)
+            .expect("CMake grammar should load");
+        let tree = parser
+            .parse("cmake_minimum_required(VERSION 3.10)", None)
+            .unwrap();
+        assert!(!tree.root_node().has_error());
+    }
+
+    #[test]
+    fn dockerfile_grammar_creates_valid_parser() {
+        let grammar = tree_sitter_grammar(Language::Dockerfile).unwrap();
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&grammar)
+            .expect("Dockerfile grammar should load");
+        let tree = parser.parse("FROM ubuntu:20.04\n", None).unwrap();
+        assert!(!tree.root_node().has_error());
+    }
+
+    #[test]
+    fn xml_grammar_creates_valid_parser() {
+        let grammar = tree_sitter_grammar(Language::Xml).unwrap();
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&grammar)
+            .expect("XML grammar should load");
+        let tree = parser
+            .parse("<?xml version=\"1.0\"?><root><item/></root>", None)
+            .unwrap();
+        assert!(!tree.root_node().has_error());
     }
 }
