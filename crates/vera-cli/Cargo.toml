@@ -21,9 +21,5 @@ anyhow = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
-[features]
-local = ["vera-core/local"]
-
-
 [dev-dependencies]
 tempfile = "3"

@@ -20,6 +20,11 @@ pub struct LocalEmbeddingProvider {
 
 impl LocalEmbeddingProvider {
     pub async fn new() -> Result<Self, EmbeddingError> {
+        crate::local_models::ensure_ort_runtime().map_err(|e| EmbeddingError::ApiError {
+            status: 500,
+            message: e.to_string(),
+        })?;
+
         let onnx_path = ensure_model_file(EMBEDDING_REPO, ONNX_FILE)
             .await
             .map_err(|e| EmbeddingError::ApiError {
@@ -78,7 +83,7 @@ impl LocalEmbeddingProvider {
         })?
         .map_err(|e| EmbeddingError::ApiError {
             status: 500,
-            message: e.to_string(),
+            message: crate::local_models::wrap_ort_error(e),
         })?;
 
         Ok(Self {
@@ -224,6 +229,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_local_embedding_provider() {
+        // Skip if ONNX Runtime is not installed (requires libonnxruntime.so)
+        if crate::local_models::ensure_ort_runtime().is_err() {
+            eprintln!("Skipping: ONNX Runtime not available");
+            return;
+        }
         // Since test downloads ~150MB, this could take a moment.
         let provider = LocalEmbeddingProvider::new().await.unwrap();
         let texts = vec!["Hello world".to_string(), "Another test".to_string()];

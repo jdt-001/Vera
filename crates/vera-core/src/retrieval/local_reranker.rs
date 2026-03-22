@@ -18,6 +18,11 @@ pub struct LocalReranker {
 
 impl LocalReranker {
     pub async fn new() -> Result<Self, RerankerError> {
+        crate::local_models::ensure_ort_runtime().map_err(|e| RerankerError::ApiError {
+            status: 500,
+            message: e.to_string(),
+        })?;
+
         let onnx_path = ensure_model_file(RERANKER_REPO, ONNX_FILE)
             .await
             .map_err(|e| RerankerError::ApiError {
@@ -62,7 +67,7 @@ impl LocalReranker {
         })?
         .map_err(|e| RerankerError::ApiError {
             status: 500,
-            message: e.to_string(),
+            message: crate::local_models::wrap_ort_error(e),
         })?;
 
         Ok(Self {
@@ -195,6 +200,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_local_reranker() {
+        // Skip if ONNX Runtime is not installed (requires libonnxruntime.so)
+        if crate::local_models::ensure_ort_runtime().is_err() {
+            eprintln!("Skipping: ONNX Runtime not available");
+            return;
+        }
         let reranker = LocalReranker::new().await.unwrap();
         let query = "How to parse JSON".to_string();
         let docs = vec![

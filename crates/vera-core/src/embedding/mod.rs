@@ -17,10 +17,8 @@ pub use provider::{
 pub mod dynamic;
 pub use dynamic::{DynamicProvider, create_dynamic_provider};
 
-#[cfg(feature = "local")]
 pub mod local_provider;
 
-#[cfg(feature = "local")]
 pub use local_provider::LocalEmbeddingProvider;
 
 /// Test helpers for creating mock embedding providers.

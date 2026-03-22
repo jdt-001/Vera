@@ -2,10 +2,101 @@ use anyhow::{Context, Result};
 use futures::StreamExt;
 use reqwest::Client;
 use std::path::PathBuf;
+use std::sync::OnceLock;
 use tokio::fs::{self, File};
 use tokio::io::AsyncWriteExt;
 
 const HUB_URL: &str = "https://huggingface.co";
+
+static ORT_INIT_RESULT: OnceLock<std::result::Result<(), String>> = OnceLock::new();
+
+/// Ensure the ONNX Runtime shared library is loaded and initialized.
+///
+/// With `ort`'s `load-dynamic` feature, the ONNX Runtime library is loaded at
+/// runtime via dlopen/LoadLibrary. This function proactively loads the library
+/// using `ort::init_from()` so we get a clean error instead of a panic.
+///
+/// Safe to call multiple times — only the first call takes effect.
+///
+/// Returns a graceful error if ONNX Runtime is not installed, suggesting
+/// the user install it or use API mode instead.
+pub fn ensure_ort_runtime() -> Result<()> {
+    let result = ORT_INIT_RESULT.get_or_init(|| {
+        let lib_name = ort_lib_filename();
+        match ort::init_from(lib_name) {
+            Ok(builder) => {
+                builder.commit();
+                Ok(())
+            }
+            Err(e) => Err(format!(
+                "ONNX Runtime shared library not found. Local inference requires ONNX Runtime to be installed.\n\
+                 Install it from: https://github.com/microsoft/onnxruntime/releases\n\
+                 Or use API mode instead by setting EMBEDDING_MODEL_BASE_URL, EMBEDDING_MODEL_ID, and EMBEDDING_MODEL_API_KEY.\n\
+                 Original error: {e}"
+            )),
+        }
+    });
+
+    match result {
+        Ok(()) => Ok(()),
+        Err(msg) => anyhow::bail!("{msg}"),
+    }
+}
+
+/// Get the platform-specific ONNX Runtime shared library filename.
+///
+/// Also checks the `ORT_DYLIB_PATH` environment variable for a custom path.
+fn ort_lib_filename() -> String {
+    if let Ok(path) = std::env::var("ORT_DYLIB_PATH") {
+        if !path.is_empty() {
+            return path;
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        "onnxruntime.dll".to_string()
+    }
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        "libonnxruntime.so".to_string()
+    }
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    {
+        "libonnxruntime.dylib".to_string()
+    }
+    #[cfg(not(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "android",
+        target_os = "macos",
+        target_os = "ios"
+    )))]
+    {
+        "libonnxruntime.so".to_string()
+    }
+}
+
+/// Wrap an ort error with a user-friendly message suggesting alternatives.
+pub fn wrap_ort_error(e: impl std::fmt::Display) -> String {
+    let err_msg = e.to_string();
+    if err_msg.contains("load")
+        || err_msg.contains("libonnxruntime")
+        || err_msg.contains("onnxruntime")
+        || err_msg.contains("dylib")
+        || err_msg.contains("dll")
+        || err_msg.contains(".so")
+    {
+        format!(
+            "ONNX Runtime shared library not found. Local inference requires ONNX Runtime to be installed.\n\
+             Install it from: https://github.com/microsoft/onnxruntime/releases\n\
+             Or use API mode instead by setting EMBEDDING_MODEL_BASE_URL, EMBEDDING_MODEL_ID, and EMBEDDING_MODEL_API_KEY.\n\
+             Original error: {err_msg}"
+        )
+    } else {
+        format!("Failed to initialize ONNX Runtime: {err_msg}")
+    }
+}
 
 /// Download a file from HuggingFace Hub using atomic writes.
 pub async fn ensure_model_file(repo_id: &str, file_path: &str) -> Result<PathBuf> {

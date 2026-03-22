@@ -23,10 +23,8 @@ pub use reranker::{
 pub mod dynamic_reranker;
 pub use dynamic_reranker::{DynamicReranker, create_dynamic_reranker};
 
-#[cfg(feature = "local")]
 pub mod local_reranker;
 
-#[cfg(feature = "local")]
 pub use local_reranker::LocalReranker;
 
 pub use vector::{VectorSearchError, search_vector, search_vector_with_stores};

@@ -1,5 +1,4 @@
 use crate::config::VeraConfig;
-#[cfg(feature = "local")]
 use crate::retrieval::local_reranker::LocalReranker;
 use crate::retrieval::reranker::{
     ApiReranker, RerankScore, Reranker, RerankerConfig, RerankerError,
@@ -9,7 +8,6 @@ use std::time::Duration;
 
 pub enum DynamicReranker {
     Api(ApiReranker),
-    #[cfg(feature = "local")]
     Local(LocalReranker),
 }
 
@@ -21,7 +19,6 @@ impl Reranker for DynamicReranker {
     ) -> Result<Vec<RerankScore>, RerankerError> {
         match self {
             Self::Api(p) => p.rerank(query, documents).await,
-            #[cfg(feature = "local")]
             Self::Local(p) => p.rerank(query, documents).await,
         }
     }
@@ -32,17 +29,10 @@ pub async fn create_dynamic_reranker(
     is_local: bool,
 ) -> anyhow::Result<Option<DynamicReranker>> {
     if is_local {
-        #[cfg(feature = "local")]
-        {
-            let p = LocalReranker::new()
-                .await
-                .map_err(|e| anyhow::anyhow!("Failed to initialize local reranker: {e}\nHint: check network connection or manually place model at ~/.vera/models/"))?;
-            Ok(Some(DynamicReranker::Local(p)))
-        }
-        #[cfg(not(feature = "local"))]
-        {
-            anyhow::bail!("Vera was compiled without the 'local' feature.")
-        }
+        let p = LocalReranker::new()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to initialize local reranker: {e}\nHint: check network connection or manually place model at ~/.vera/models/"))?;
+        Ok(Some(DynamicReranker::Local(p)))
     } else {
         if !config.retrieval.reranking_enabled {
             return Ok(None);
