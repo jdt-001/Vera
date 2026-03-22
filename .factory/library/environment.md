@@ -25,6 +25,8 @@ Loaded from `secrets.env` (gitignored, never commit):
 - Reranking: jina-reranker-v2-base-multilingual (278M params)
 - Activated by `--local` flag or `VERA_LOCAL=1` env var
 - Requires an ONNX Runtime shared library at runtime; if auto-detection fails, set `ORT_DYLIB_PATH` to the library path
+- On this host, the linker cache only exposes an incompatible Intel oneAPI ONNX Runtime 1.12 library at `/opt/intel/oneapi/compiler/2025.0/lib/libonnxruntime.1.12.22.721.so`; `ort 2.0.0-rc.11` needs 1.23.x or newer.
+- For simplify-install validation, a compatible temporary runtime was provisioned at `/tmp/vera-onnxruntime-1.24.4/lib/libonnxruntime.so` and works when exported via `ORT_DYLIB_PATH`.
 - API mode does not need ONNX Runtime installed
 
 ## Build Requirements
