@@ -22,13 +22,27 @@ Vera (Vector Enhanced Relevance Agent) is a code indexing and retrieval CLI tool
 
 ### Download Pre-Built Binaries
 
-Pre-built binaries for Linux (x86_64, aarch64), macOS (x86_64, Apple Silicon), and Windows (x86_64) are available from [GitHub Releases](https://github.com/vera-search/vera/releases).
+Pre-built binaries are available from [GitHub Releases](https://github.com/lemon07r/Vera/releases) for:
+
+| Platform | Target | Archive |
+|----------|--------|---------|
+| Linux x86_64 | `x86_64-unknown-linux-gnu` | `.tar.gz` |
+| Linux aarch64 | `aarch64-unknown-linux-gnu` | `.tar.gz` |
+| macOS x86_64 (Intel) | `x86_64-apple-darwin` | `.tar.gz` |
+| macOS aarch64 (Apple Silicon) | `aarch64-apple-darwin` | `.tar.gz` |
+| Windows x86_64 | `x86_64-pc-windows-msvc` | `.zip` |
 
 ```bash
-# Download the latest release for your platform, then:
-chmod +x vera
-cp vera ~/.local/bin/
+# Example: download latest release for Linux x86_64
+curl -sL https://github.com/lemon07r/Vera/releases/latest/download/vera-x86_64-unknown-linux-gnu.tar.gz | tar xz
+chmod +x vera-x86_64-unknown-linux-gnu/vera
+cp vera-x86_64-unknown-linux-gnu/vera ~/.local/bin/
+
+# Verify
+vera --version
 ```
+
+Each release includes SHA256 checksums (`checksums-sha256.txt`) for verification.
 
 ### Build from Source
 

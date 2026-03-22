@@ -1,0 +1,167 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            archive: tar.gz
+
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            use_cross: true
+            archive: tar.gz
+
+          - target: x86_64-apple-darwin
+            os: macos-13
+            archive: tar.gz
+
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            archive: tar.gz
+
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            archive: zip
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Download vendored grammars
+        shell: bash
+        run: |
+          # Vue grammar
+          VUE_DIR="crates/tree-sitter-vue/src"
+          if [ ! -f "$VUE_DIR/parser.c" ]; then
+            mkdir -p "$VUE_DIR/tree_sitter"
+            curl -sL "https://raw.githubusercontent.com/tree-sitter-grammars/tree-sitter-vue/main/src/parser.c" -o "$VUE_DIR/parser.c"
+            curl -sL "https://raw.githubusercontent.com/tree-sitter-grammars/tree-sitter-vue/main/src/scanner.c" -o "$VUE_DIR/scanner.c"
+            curl -sL "https://raw.githubusercontent.com/tree-sitter-grammars/tree-sitter-vue/main/src/tag.h" -o "$VUE_DIR/tag.h"
+            curl -sL "https://raw.githubusercontent.com/tree-sitter-grammars/tree-sitter-vue/main/src/tree_sitter/parser.h" -o "$VUE_DIR/tree_sitter/parser.h"
+            curl -sL "https://raw.githubusercontent.com/tree-sitter-grammars/tree-sitter-vue/main/src/tree_sitter/alloc.h" -o "$VUE_DIR/tree_sitter/alloc.h"
+            curl -sL "https://raw.githubusercontent.com/tree-sitter-grammars/tree-sitter-vue/main/src/tree_sitter/array.h" -o "$VUE_DIR/tree_sitter/array.h"
+          fi
+
+          # Dockerfile grammar
+          DOCKERFILE_DIR="crates/tree-sitter-dockerfile/src"
+          if [ ! -f "$DOCKERFILE_DIR/parser.c" ]; then
+            mkdir -p "$DOCKERFILE_DIR/tree_sitter"
+            curl -sL "https://raw.githubusercontent.com/camdencheek/tree-sitter-dockerfile/main/src/parser.c" -o "$DOCKERFILE_DIR/parser.c"
+            curl -sL "https://raw.githubusercontent.com/camdencheek/tree-sitter-dockerfile/main/src/scanner.c" -o "$DOCKERFILE_DIR/scanner.c"
+            curl -sL "https://raw.githubusercontent.com/camdencheek/tree-sitter-dockerfile/main/src/tree_sitter/parser.h" -o "$DOCKERFILE_DIR/tree_sitter/parser.h"
+          fi
+
+          # Astro grammar
+          ASTRO_DIR="crates/tree-sitter-astro/src"
+          if [ ! -f "$ASTRO_DIR/parser.c" ]; then
+            mkdir -p "$ASTRO_DIR/tree_sitter"
+            curl -sL "https://raw.githubusercontent.com/virchau13/tree-sitter-astro/master/src/parser.c" -o "$ASTRO_DIR/parser.c"
+            curl -sL "https://raw.githubusercontent.com/virchau13/tree-sitter-astro/master/src/scanner.c" -o "$ASTRO_DIR/scanner.c"
+            curl -sL "https://raw.githubusercontent.com/virchau13/tree-sitter-astro/master/src/tag.h" -o "$ASTRO_DIR/tag.h"
+            curl -sL "https://raw.githubusercontent.com/virchau13/tree-sitter-astro/master/src/tree_sitter/parser.h" -o "$ASTRO_DIR/tree_sitter/parser.h"
+            curl -sL "https://raw.githubusercontent.com/virchau13/tree-sitter-astro/master/src/tree_sitter/alloc.h" -o "$ASTRO_DIR/tree_sitter/alloc.h"
+            curl -sL "https://raw.githubusercontent.com/virchau13/tree-sitter-astro/master/src/tree_sitter/array.h" -o "$ASTRO_DIR/tree_sitter/array.h"
+          fi
+
+      - name: Install cross
+        if: matrix.use_cross
+        run: cargo install cross --locked
+
+      - name: Build (native)
+        if: ${{ !matrix.use_cross }}
+        run: cargo build --release --target ${{ matrix.target }} -p vera-cli
+
+      - name: Build (cross)
+        if: ${{ matrix.use_cross }}
+        run: cross build --release --target ${{ matrix.target }} -p vera-cli
+
+      - name: Package (tar.gz)
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          ARCHIVE_NAME="vera-${{ matrix.target }}"
+          mkdir -p "staging/${ARCHIVE_NAME}"
+          cp "target/${{ matrix.target }}/release/vera" "staging/${ARCHIVE_NAME}/"
+          cd staging
+          tar czf "${ARCHIVE_NAME}.tar.gz" "${ARCHIVE_NAME}"
+          echo "ARCHIVE=${ARCHIVE_NAME}.tar.gz" >> "$GITHUB_ENV"
+
+      - name: Package (zip)
+        if: matrix.archive == 'zip'
+        shell: bash
+        run: |
+          ARCHIVE_NAME="vera-${{ matrix.target }}"
+          mkdir -p "staging/${ARCHIVE_NAME}"
+          cp "target/${{ matrix.target }}/release/vera.exe" "staging/${ARCHIVE_NAME}/"
+          cd staging
+          7z a "${ARCHIVE_NAME}.zip" "${ARCHIVE_NAME}"
+          echo "ARCHIVE=${ARCHIVE_NAME}.zip" >> "$GITHUB_ENV"
+
+      - name: Generate SHA256 checksum
+        shell: bash
+        working-directory: staging
+        run: |
+          sha256sum "${{ env.ARCHIVE }}" > "${{ env.ARCHIVE }}.sha256"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: staging/vera-${{ matrix.target }}.*
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect release assets
+        shell: bash
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' -o -name '*.sha256' \) -exec cp {} release/ \;
+
+          # Generate combined checksums file
+          cd release
+          cat *.sha256 > checksums-sha256.txt
+          ls -la
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') }}
