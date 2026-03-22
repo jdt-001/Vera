@@ -24,9 +24,11 @@ Loaded from `secrets.env` (gitignored, never commit):
 - Embedding: jina-embeddings-v5-text-nano-retrieval (239M params)
 - Reranking: jina-reranker-v2-base-multilingual (278M params)
 - Activated by `--local` flag or `VERA_LOCAL=1` env var
+- Requires an ONNX Runtime shared library at runtime; if auto-detection fails, set `ORT_DYLIB_PATH` to the library path
+- API mode does not need ONNX Runtime installed
 
 ## Build Requirements
 
 - Rust 1.85+ (project uses edition 2024)
 - C compiler for tree-sitter grammars (cc crate) and bundled SQLite
-- No other external dependencies
+- API mode has no other external runtime dependencies
