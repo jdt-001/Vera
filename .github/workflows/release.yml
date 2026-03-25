@@ -60,6 +60,13 @@ jobs:
         if: matrix.use_cross
         run: cargo install cross --locked
 
+      - name: Set MSVC CRT flags
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          echo "CFLAGS=/MD" >> "$GITHUB_ENV"
+          echo "CXXFLAGS=/MD" >> "$GITHUB_ENV"
+
       - name: Build (native)
         if: ${{ !matrix.use_cross }}
         run: cargo build --release --target ${{ matrix.target }} -p vera-cli
@@ -94,7 +101,11 @@ jobs:
         shell: bash
         working-directory: staging
         run: |
-          sha256sum "${{ env.ARCHIVE }}" > "${{ env.ARCHIVE }}.sha256"
+          if command -v sha256sum &>/dev/null; then
+            sha256sum "${{ env.ARCHIVE }}" > "${{ env.ARCHIVE }}.sha256"
+          else
+            shasum -a 256 "${{ env.ARCHIVE }}" > "${{ env.ARCHIVE }}.sha256"
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
