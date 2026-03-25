@@ -1,5 +1,10 @@
 //! Shared helper functions for CLI command implementations.
 
+/// Load the effective runtime configuration.
+pub fn load_runtime_config() -> anyhow::Result<vera_core::config::VeraConfig> {
+    crate::state::load_runtime_config()
+}
+
 /// Check if the local inference mode is active.
 pub fn is_local_mode(local_flag: bool) -> bool {
     local_flag || vera_core::config::is_local_mode()

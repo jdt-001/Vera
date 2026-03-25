@@ -4,7 +4,7 @@ use std::path::Path;
 
 use anyhow::{Context, bail};
 
-use crate::helpers::is_local_mode;
+use crate::helpers::{is_local_mode, load_runtime_config};
 
 /// Run the `vera update <path>` command.
 pub fn run(path: &str, json_output: bool, local_flag: bool) -> anyhow::Result<()> {
@@ -30,7 +30,7 @@ pub fn run(path: &str, json_output: bool, local_flag: bool) -> anyhow::Result<()
     let rt = tokio::runtime::Runtime::new()
         .map_err(|e| anyhow::anyhow!("failed to create async runtime: {e}"))?;
 
-    let config = vera_core::config::VeraConfig::default();
+    let config = load_runtime_config()?;
 
     // Create the embedding provider from environment or local model.
     let (provider, model_name) = rt.block_on(vera_core::embedding::create_dynamic_provider(

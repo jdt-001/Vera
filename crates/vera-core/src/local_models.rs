@@ -1,14 +1,29 @@
 use anyhow::{Context, Result};
 use futures::StreamExt;
 use reqwest::Client;
+use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use tokio::fs::{self, File};
 use tokio::io::AsyncWriteExt;
 
 const HUB_URL: &str = "https://huggingface.co";
+const EMBEDDING_REPO: &str = "jinaai/jina-embeddings-v5-text-nano-retrieval";
+const EMBEDDING_ONNX_FILE: &str = "onnx/model_quantized.onnx";
+const EMBEDDING_ONNX_DATA_FILE: &str = "onnx/model_quantized.onnx_data";
+const EMBEDDING_TOKENIZER_FILE: &str = "tokenizer.json";
+const RERANKER_REPO: &str = "jinaai/jina-reranker-v2-base-multilingual";
+const RERANKER_ONNX_FILE: &str = "onnx/model_quantized.onnx";
+const RERANKER_TOKENIZER_FILE: &str = "tokenizer.json";
 
 static ORT_INIT_RESULT: OnceLock<std::result::Result<(), String>> = OnceLock::new();
+
+#[derive(Debug, Clone, Serialize)]
+pub struct LocalModelAssetStatus {
+    pub name: &'static str,
+    pub path: PathBuf,
+    pub exists: bool,
+}
 
 /// Ensure the ONNX Runtime shared library is loaded and initialized.
 ///
@@ -41,6 +56,21 @@ pub fn ensure_ort_runtime() -> Result<()> {
         Ok(()) => Ok(()),
         Err(msg) => anyhow::bail!("{msg}"),
     }
+}
+
+/// Return Vera's home directory.
+///
+/// Uses `VERA_HOME` when set, otherwise defaults to `~/.vera`.
+pub fn vera_home_dir() -> Result<PathBuf> {
+    if let Ok(path) = std::env::var("VERA_HOME") {
+        if !path.trim().is_empty() {
+            return Ok(PathBuf::from(path));
+        }
+    }
+
+    Ok(dirs::home_dir()
+        .context("Could not find home directory")?
+        .join(".vera"))
 }
 
 /// Get the platform-specific ONNX Runtime shared library filename.
@@ -103,6 +133,68 @@ pub async fn ensure_model_file(repo_id: &str, file_path: &str) -> Result<PathBuf
     ensure_model_file_impl(repo_id, file_path, HUB_URL, None).await
 }
 
+/// Download the default local embedding and reranker assets.
+pub async fn prefetch_default_local_models() -> Result<Vec<PathBuf>> {
+    let mut paths = Vec::new();
+    paths.push(ensure_model_file(EMBEDDING_REPO, EMBEDDING_ONNX_FILE).await?);
+    paths.push(ensure_model_file(EMBEDDING_REPO, EMBEDDING_ONNX_DATA_FILE).await?);
+    paths.push(ensure_model_file(EMBEDDING_REPO, EMBEDDING_TOKENIZER_FILE).await?);
+    paths.push(ensure_model_file(RERANKER_REPO, RERANKER_ONNX_FILE).await?);
+    paths.push(ensure_model_file(RERANKER_REPO, RERANKER_TOKENIZER_FILE).await?);
+    Ok(paths)
+}
+
+/// Inspect the default local assets without downloading anything.
+pub fn inspect_default_local_model_files() -> Result<Vec<LocalModelAssetStatus>> {
+    let vera_home = vera_home_dir()?;
+    let assets = [
+        (
+            "embedding-onnx",
+            vera_home
+                .join("models")
+                .join(EMBEDDING_REPO)
+                .join(EMBEDDING_ONNX_FILE),
+        ),
+        (
+            "embedding-onnx-data",
+            vera_home
+                .join("models")
+                .join(EMBEDDING_REPO)
+                .join(EMBEDDING_ONNX_DATA_FILE),
+        ),
+        (
+            "embedding-tokenizer",
+            vera_home
+                .join("models")
+                .join(EMBEDDING_REPO)
+                .join(EMBEDDING_TOKENIZER_FILE),
+        ),
+        (
+            "reranker-onnx",
+            vera_home
+                .join("models")
+                .join(RERANKER_REPO)
+                .join(RERANKER_ONNX_FILE),
+        ),
+        (
+            "reranker-tokenizer",
+            vera_home
+                .join("models")
+                .join(RERANKER_REPO)
+                .join(RERANKER_TOKENIZER_FILE),
+        ),
+    ];
+
+    Ok(assets
+        .into_iter()
+        .map(|(name, path)| LocalModelAssetStatus {
+            name,
+            exists: path.exists(),
+            path,
+        })
+        .collect())
+}
+
 async fn ensure_model_file_impl(
     repo_id: &str,
     file_path: &str,
@@ -111,9 +203,9 @@ async fn ensure_model_file_impl(
 ) -> Result<PathBuf> {
     let home_dir = match home_override {
         Some(p) => p.to_path_buf(),
-        None => dirs::home_dir().context("Could not find home directory")?,
+        None => vera_home_dir()?,
     };
-    let models_dir = home_dir.join(".vera").join("models").join(repo_id);
+    let models_dir = home_dir.join("models").join(repo_id);
     let target_path = models_dir.join(file_path);
 
     if target_path.exists() {
@@ -189,7 +281,7 @@ mod tests {
     #[tokio::test]
     async fn test_download_failure_cleanup() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let home = temp_dir.path().to_path_buf();
+        let home = temp_dir.path().join(".vera");
 
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
@@ -210,7 +302,7 @@ mod tests {
 
         assert!(res.is_err(), "Download should fail due to truncated stream");
 
-        let target_dir = home.join(".vera").join("models").join("test-repo");
+        let target_dir = home.join("models").join("test-repo");
         let part_file = target_dir
             .join("test-file.bin")
             .with_extension(format!("part.{}", std::process::id()));

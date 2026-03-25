@@ -2,7 +2,7 @@
 
 use anyhow::bail;
 
-use crate::helpers::{is_local_mode, output_results};
+use crate::helpers::{is_local_mode, load_runtime_config, output_results};
 
 /// Run the `vera search <query>` command.
 ///
@@ -17,7 +17,7 @@ pub fn run(
     json_output: bool,
     local_flag: bool,
 ) -> anyhow::Result<()> {
-    let config = vera_core::config::VeraConfig::default();
+    let config = load_runtime_config()?;
     let result_limit = limit.unwrap_or(config.retrieval.default_limit);
 
     // Find the index directory (look in current working directory).

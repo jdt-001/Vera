@@ -1,10 +1,13 @@
 //! `vera config` — Show or set configuration values.
 
-use anyhow::bail;
+use anyhow::{Context, bail};
+
+use crate::helpers::load_runtime_config;
+use crate::state;
 
 /// Run the `vera config` command.
 pub fn run(args: &[String], json_output: bool) -> anyhow::Result<()> {
-    let config = vera_core::config::VeraConfig::default();
+    let mut config = load_runtime_config()?;
 
     match args.first().map(|s| s.as_str()) {
         None | Some("show") => {
@@ -46,29 +49,18 @@ pub fn run(args: &[String], json_output: bool) -> anyhow::Result<()> {
             let value = args.get(2);
             match (key, value) {
                 (Some(key), Some(value)) => {
-                    // Validate the key exists.
-                    if get_config_value(&config, key).is_none() {
-                        bail!(
-                            "unknown configuration key: {key}\n\
-                             Hint: run `vera config show` to see all available keys."
-                        );
-                    }
-                    // Note: Vera currently uses default config. Persistent config
-                    // file support is planned. For now, show the intended change.
+                    set_config_value(&mut config, key, value)?;
+                    state::save_runtime_config(&config)?;
+
                     if json_output {
                         let result = serde_json::json!({
                             "key": key,
                             "value": value,
-                            "status": "acknowledged",
-                            "note": "Vera currently uses default configuration. \
-                                     Persistent config file support is planned."
+                            "status": "saved"
                         });
                         println!("{}", serde_json::to_string_pretty(&result).unwrap());
                     } else {
-                        println!("Note: Vera currently uses default configuration.");
-                        println!("Persistent config file support is planned.");
-                        println!();
-                        println!("Intended change: {key} = {value}");
+                        println!("Saved: {key} = {value}");
                     }
                 }
                 _ => bail!(
@@ -184,4 +176,67 @@ pub fn get_config_value(
         )),
         _ => None,
     }
+}
+
+fn set_config_value(
+    config: &mut vera_core::config::VeraConfig,
+    key: &str,
+    value: &str,
+) -> anyhow::Result<()> {
+    match key {
+        "indexing.max_chunk_lines" => {
+            config.indexing.max_chunk_lines = parse_value(key, value)?;
+        }
+        "indexing.max_file_size_bytes" => {
+            config.indexing.max_file_size_bytes = parse_value(key, value)?;
+        }
+        "indexing.default_excludes" => {
+            config.indexing.default_excludes = serde_json::from_str(value).with_context(|| {
+                format!("failed to parse {key} as JSON array of strings: {value}")
+            })?;
+        }
+        "retrieval.default_limit" => {
+            config.retrieval.default_limit = parse_value(key, value)?;
+        }
+        "retrieval.rrf_k" => {
+            config.retrieval.rrf_k = parse_value(key, value)?;
+        }
+        "retrieval.rerank_candidates" => {
+            config.retrieval.rerank_candidates = parse_value(key, value)?;
+        }
+        "retrieval.reranking_enabled" => {
+            config.retrieval.reranking_enabled = parse_value(key, value)?;
+        }
+        "embedding.batch_size" => {
+            config.embedding.batch_size = parse_value(key, value)?;
+        }
+        "embedding.max_concurrent_requests" => {
+            config.embedding.max_concurrent_requests = parse_value(key, value)?;
+        }
+        "embedding.timeout_secs" => {
+            config.embedding.timeout_secs = parse_value(key, value)?;
+        }
+        "embedding.max_retries" => {
+            config.embedding.max_retries = parse_value(key, value)?;
+        }
+        "embedding.max_stored_dim" => {
+            config.embedding.max_stored_dim = parse_value(key, value)?;
+        }
+        _ => bail!(
+            "unknown configuration key: {key}\n\
+             Hint: run `vera config show` to see all available keys."
+        ),
+    }
+
+    Ok(())
+}
+
+fn parse_value<T>(key: &str, value: &str) -> anyhow::Result<T>
+where
+    T: std::str::FromStr,
+    T::Err: std::fmt::Display,
+{
+    value
+        .parse::<T>()
+        .map_err(|e| anyhow::anyhow!("failed to parse {key}: {e}"))
 }

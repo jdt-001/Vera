@@ -4,10 +4,25 @@ use std::path::Path;
 
 use anyhow::{Context, bail};
 
-use crate::helpers::{is_local_mode, print_human_summary};
+use crate::helpers::{is_local_mode, load_runtime_config, print_human_summary};
 
 /// Run the `vera index <path>` command.
 pub fn run(path: &str, json_output: bool, local_flag: bool) -> anyhow::Result<()> {
+    let summary = execute(path, local_flag)?;
+
+    if json_output {
+        let json = serde_json::to_string_pretty(&summary)
+            .map_err(|e| anyhow::anyhow!("failed to serialize summary: {e}"))?;
+        println!("{json}");
+    } else {
+        print_human_summary(&summary);
+    }
+
+    Ok(())
+}
+
+/// Index a repository and return the resulting summary.
+pub fn execute(path: &str, local_flag: bool) -> anyhow::Result<vera_core::indexing::IndexSummary> {
     let repo_path = Path::new(path);
 
     // Validate path early — before requiring API credentials.
@@ -30,7 +45,7 @@ pub fn run(path: &str, json_output: bool, local_flag: bool) -> anyhow::Result<()
     let rt = tokio::runtime::Runtime::new()
         .map_err(|e| anyhow::anyhow!("failed to create async runtime: {e}"))?;
 
-    let config = vera_core::config::VeraConfig::default();
+    let config = load_runtime_config()?;
 
     // Create the embedding provider from environment or local model.
     let (provider, model_name) = rt.block_on(vera_core::embedding::create_dynamic_provider(
@@ -47,14 +62,5 @@ pub fn run(path: &str, json_output: bool, local_flag: bool) -> anyhow::Result<()
         ))
         .context("indexing failed")?;
 
-    // Output results.
-    if json_output {
-        let json = serde_json::to_string_pretty(&summary)
-            .map_err(|e| anyhow::anyhow!("failed to serialize summary: {e}"))?;
-        println!("{json}");
-    } else {
-        print_human_summary(&summary);
-    }
-
-    Ok(())
+    Ok(summary)
 }

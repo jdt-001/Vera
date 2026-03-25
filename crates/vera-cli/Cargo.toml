@@ -20,6 +20,7 @@ tokio = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+dirs = "6.0.0"
 
 [dev-dependencies]
 tempfile = "3"

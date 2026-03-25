@@ -1,0 +1,7 @@
+interface:
+  display_name: "Vera"
+  short_description: "Semantic code search for local repos"
+  default_prompt: "Use $vera to find the most relevant code for this task in my repository."
+
+policy:
+  allow_implicit_invocation: true

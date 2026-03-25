@@ -10,6 +10,8 @@
 
 mod commands;
 mod helpers;
+mod skill_assets;
+mod state;
 
 use std::process;
 
@@ -18,16 +20,17 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[command(
     name = "vera",
-    about = "Hybrid code indexing and retrieval for local and tool-driven workflows",
+    about = "Hybrid code indexing and retrieval for CLI-first coding-agent workflows",
     long_about = "Vera is a code indexing and retrieval tool for source trees. It combines \
                   BM25 full-text search with vector similarity search using Reciprocal Rank \
                   Fusion (RRF) and optional cross-encoder reranking to return ranked code \
-                  results for direct CLI use and tool integrations.\n\n\
+                  results for direct CLI use, installable agent skills, and optional MCP.\n\n\
                   Quick start:\n  \
+                  vera agent install    # Install the Vera skill for supported agents\n  \
+                  vera setup --local    # Prefer local inference and bootstrap defaults\n  \
                   vera index .          # Index current directory\n  \
                   vera search \"auth\"    # Search for authentication code\n  \
-                  vera update .         # Update index after changes\n  \
-                  vera stats            # Show index statistics",
+                  vera doctor           # Check local setup and index health",
     version
 )]
 struct Cli {
@@ -65,6 +68,80 @@ enum Commands {
                       vera mcp                       # Start MCP server on stdio")]
     Mcp,
 
+    /// Install or manage the Vera skill for supported coding agents.
+    ///
+    /// This is the preferred agent integration path. It writes the canonical
+    /// `skills/vera` bundle into well-known skill directories for supported
+    /// clients, so agents can use the Vera CLI directly without MCP.
+    #[command(
+        long_about = "Install or manage the Vera skill for supported coding agents.\n\n\
+                      This is the preferred agent integration path. Vera installs a \
+                      CLI-centric skill bundle into known skill directories so agents \
+                      can call `vera index`, `vera search`, `vera update`, and \
+                      `vera stats` directly.\n\n\
+                      `vera agent install` is idempotent: rerun it to refresh an \
+                      existing skill install.\n\n\
+                      Examples:\n  \
+                      vera agent install                       # Install globally for all supported clients\n  \
+                      vera agent status --scope all           # Show project and global installs\n  \
+                      vera agent remove --client codex        # Remove the global Codex install"
+    )]
+    Agent {
+        /// Agent command: install, status, or remove.
+        #[arg(value_enum)]
+        command: commands::agent::AgentCommand,
+        /// Which agent client to target.
+        #[arg(long, value_enum, default_value_t = commands::agent::AgentClient::All)]
+        client: commands::agent::AgentClient,
+        /// Install scope: global, project, or all.
+        #[arg(long, value_enum, default_value_t = commands::agent::AgentScope::Global)]
+        scope: commands::agent::AgentScope,
+    },
+
+    /// Persist a preferred Vera mode and bootstrap first-run state.
+    ///
+    /// By default this configures Vera for local mode, downloads the default
+    /// local model assets, and optionally indexes a repository immediately.
+    #[command(
+        long_about = "Persist a preferred Vera mode and bootstrap first-run state.\n\n\
+                      By default `vera setup` configures Vera for local mode. Use \
+                      `--api` to persist API credentials from the current shell \
+                      environment instead.\n\n\
+                      Examples:\n  \
+                      vera setup --local               # Prefer local inference\n  \
+                      vera setup --local --index .     # Configure local mode and index cwd\n  \
+                      vera setup --api                 # Persist API credentials from env"
+    )]
+    Setup {
+        /// Configure Vera for local inference mode.
+        #[arg(long, conflicts_with = "api")]
+        local: bool,
+        /// Configure Vera for API-backed mode using current env vars.
+        #[arg(long, conflicts_with = "local")]
+        api: bool,
+        /// Optionally index a repository after saving config.
+        #[arg(long)]
+        index: Option<String>,
+        /// Skip the confirmation prompt.
+        #[arg(long)]
+        yes: bool,
+    },
+
+    /// Inspect the current Vera setup for common configuration issues.
+    ///
+    /// Checks the persisted config, effective mode, local runtime or API env,
+    /// and whether the current repository has an index.
+    #[command(
+        long_about = "Inspect the current Vera setup for common configuration issues.\n\n\
+                      Checks the persisted config, effective mode, local runtime or \
+                      API environment variables, and whether the current repository \
+                      has a `.vera/` index.\n\n\
+                      Examples:\n  \
+                      vera doctor\n  \
+                      vera doctor --json"
+    )]
+    Doctor,
+
     /// Index a codebase for search.
     ///
     /// Discovers source files, parses them with tree-sitter, creates
@@ -77,11 +154,11 @@ enum Commands {
     ///   vera index . --json
     #[command(long_about = "Index a codebase for search.\n\n\
                       Discovers source files (respecting .gitignore), parses them with \
-                      tree-sitter for 20+ languages, creates searchable chunks at symbol \
-                      boundaries, generates embeddings via API, and stores everything in \
-                      a local `.vera/` index directory.\n\n\
-                      Requires EMBEDDING_MODEL_BASE_URL, EMBEDDING_MODEL_ID, and \
-                      EMBEDDING_MODEL_API_KEY environment variables.\n\n\
+                      tree-sitter for 60+ languages, creates searchable chunks at symbol \
+                      boundaries, generates embeddings using the current Vera mode, and \
+                      stores everything in a local `.vera/` index directory.\n\n\
+                      Use `vera setup --local` for the default local path, or configure \
+                      API mode with `vera setup --api`.\n\n\
                       Examples:\n  \
                       vera index .                  # Index current directory\n  \
                       vera index /path/to/repo      # Index a specific repo\n  \
@@ -164,8 +241,8 @@ enum Commands {
                       Uses content hashing to detect files that have been added, modified, \
                       or deleted since the last index/update. Only changed files are \
                       re-processed, making updates much faster than a full re-index.\n\n\
-                      Requires EMBEDDING_MODEL_BASE_URL, EMBEDDING_MODEL_ID, and \
-                      EMBEDDING_MODEL_API_KEY environment variables.\n\n\
+                      Uses the saved Vera mode from `vera setup`, or the current shell \
+                      environment if you are configuring providers manually.\n\n\
                       Examples:\n  \
                       vera update .                  # Update current directory\n  \
                       vera update /path/to/repo      # Update a specific repo\n  \
@@ -245,12 +322,37 @@ fn main() {
         .init();
 
     let cli = Cli::parse();
+    if let Err(err) = state::apply_saved_env() {
+        eprintln!("Error: {err:#}");
+        process::exit(1);
+    }
 
     let result = match cli.command {
         Commands::Mcp => {
             tracing::info!("starting MCP server");
             commands::mcp::run();
             Ok(())
+        }
+        Commands::Agent {
+            command,
+            client,
+            scope,
+        } => {
+            tracing::info!("agent command");
+            commands::agent::run(command, client, scope, cli.json)
+        }
+        Commands::Setup {
+            local,
+            api,
+            index,
+            yes,
+        } => {
+            tracing::info!("setup command");
+            commands::setup::run(local, api, index, cli.json, yes)
+        }
+        Commands::Doctor => {
+            tracing::info!("doctor command");
+            commands::doctor::run(cli.json)
         }
         Commands::Index { path, local } => {
             tracing::info!(path = %path, "indexing");
@@ -300,6 +402,45 @@ mod tests {
     fn cli_parses_index_command() {
         let cli = Cli::parse_from(["vera", "index", "/tmp/repo"]);
         assert!(matches!(cli.command, Commands::Index { path, .. } if path == "/tmp/repo"));
+    }
+
+    #[test]
+    fn cli_parses_agent_install_command() {
+        let cli = Cli::parse_from(["vera", "agent", "install", "--client", "codex"]);
+        match cli.command {
+            Commands::Agent {
+                command,
+                client,
+                scope,
+                ..
+            } => {
+                assert_eq!(command, commands::agent::AgentCommand::Install);
+                assert_eq!(client, commands::agent::AgentClient::Codex);
+                assert_eq!(scope, commands::agent::AgentScope::Global);
+            }
+            _ => panic!("expected Agent command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_setup_command() {
+        let cli = Cli::parse_from(["vera", "setup", "--local", "--index", "."]);
+        match cli.command {
+            Commands::Setup {
+                local, api, index, ..
+            } => {
+                assert!(local);
+                assert!(!api);
+                assert_eq!(index, Some(".".to_string()));
+            }
+            _ => panic!("expected Setup command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_doctor_command() {
+        let cli = Cli::parse_from(["vera", "doctor"]);
+        assert!(matches!(cli.command, Commands::Doctor));
     }
 
     #[test]
