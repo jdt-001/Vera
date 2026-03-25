@@ -95,7 +95,12 @@ Or if `vera` is already installed:
 vera mcp
 ```
 
-The server exposes `search_code`, `index_project`, `update_project`, and `get_stats`.
+The server exposes four tools over JSON-RPC (stdio):
+
+- `search_code` — search the index with the same options as `vera search`
+- `index_project` — build or rebuild the index for a directory
+- `update_project` — incrementally update the index after code changes
+- `get_stats` — return index statistics (chunk count, languages, etc.)
 
 ### Alternative: Prebuilt Binaries
 
@@ -169,37 +174,35 @@ Only model calls leave your machine. Indexing, storage, and search remain local.
 ## Usage
 
 ```bash
-vera search "parse_config"
 vera search "authentication logic"
 vera search "error handling" --lang rust
 vera search "routes" --path "src/**/*.ts"
 vera search "handler" --type function --limit 5 --json
 ```
 
-Update after code changes:
+For tips on writing effective queries, filtering results, and when to use `rg` instead, see the [query guide](docs/query-guide.md).
+
+Update the index after code changes:
 
 ```bash
 vera update .
 ```
 
-Install agent skill files and check status:
+Other useful commands:
 
 ```bash
-vera agent install
-vera agent status --scope all
+vera doctor                    # diagnose setup issues
+vera stats                     # index statistics
+vera config                    # show current configuration
+vera agent install             # install skill files for AI agents
+vera agent status --scope all  # check skill installation status
 ```
 
-Inspect the index:
+If something isn't working, see [troubleshooting](docs/troubleshooting.md).
 
-```bash
-vera doctor
-vera stats
-vera config
-```
+The skill file at [skills/vera/SKILL.md](skills/vera/SKILL.md) teaches AI agents how to use Vera effectively.
 
-The skill file at [skills/vera/SKILL.md](skills/vera/SKILL.md) teaches agents how to use Vera effectively.
-
-Sample JSON output:
+Sample JSON output (`--json`):
 
 ```json
 [
