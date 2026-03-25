@@ -26,15 +26,15 @@ vera search "error handling" --lang rust
 vera search "handler" --type function --limit 5 --json
 ```
 
-## Why Vera?
+## Why Vera is Better
 
 ### Cross-encoder reranking
 
 Most code indexing tools retrieve candidates and stop there. Vera adds a cross-encoder reranking stage that reads query and candidate together as a single pair, scoring relevance jointly instead of comparing pre-computed vectors. This is the difference between 0.28 MRR@10 (vector retrieval alone) and 0.60 MRR@10 (with reranking).
 
-### Built for real code questions
+### Zero-dependency, single binary
 
-`rg` is still the right tool for exact strings and regex patterns. Vera is for intent queries like `"authentication logic"` or `"where does request validation happen"`, where you want ranked, cross-file, symbol-aware results instead of raw line matches.
+Vera ships as one static binary with all 60+ language grammars compiled in via tree-sitter. No Python runtime, no language servers, no per-language toolchains to install or manage. Drop the binary on any machine, run `vera setup`, and the full search pipeline is ready. Compare that to tools like Serena that require Python, uv, and separate LSP server installations for each language you want to work with.
 
 ### Benchmarked against real workloads
 
