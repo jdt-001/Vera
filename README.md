@@ -4,7 +4,7 @@
 
 Vera is a code search tool built in Rust that combines BM25 keyword matching, vector similarity, and cross-encoder reranking into a single retrieval pipeline. It parses 60+ languages with tree-sitter, runs everything locally, and returns structured JSON with file paths, line ranges, symbol metadata, and relevance scores.
 
-Every decision made is intentional, with ample research, testing, analysis, benchmarking and evaluation behind every one. I made this to succeed my fork, Pampax, which was an attempt to fix up someone else's vibeslop project because I couldnt find any other tools like it, that actually supported model/provider-agnostic reranking. I learned a lot from that project and realized I could make something way better I built it from scratch. I've tested and tried a lot of agents and tools, and knew exactly what I wanted from this one. I made it to be the very best at what it does.  
+Every decision made is intentional, with ample research, testing, analysis, benchmarking and evaluation for each one. I made this to succeed my fork, Pampax, which was an attempt to fix up someone else's vibeslop project because I couldnt find any other tools like it, that actually supported model/provider-agnostic reranking. I learned a lot from that project and realized I could make something way better I built it from scratch. I've tested and tried a lot of agents and tools, and knew exactly what I wanted from this one. I made it to be the very best at what it does.  
 
 ## Quick Start
 
