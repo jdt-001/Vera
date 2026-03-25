@@ -28,17 +28,27 @@ vera search "handler" --type function --limit 5 --json
 
 ## Why Vera?
 
-**Cross-encoder reranking.** Most code search tools stop at embedding similarity, which works for exact symbol lookups but falls apart on intent queries like `"where does request validation happen"`. Vera adds a cross-encoder reranker that reads the query and each candidate together as a pair, scoring them jointly. This alone is the difference between 0.28 MRR@10 (vector-only) and 0.60 MRR@10 (full pipeline).
+### Cross-encoder reranking
 
-**Benchmarked against real workloads.** 17 tasks across three real codebases (ripgrep, flask, fastify) covering symbol lookup, intent search, cross-file discovery, config lookup, and disambiguation. Vera's hybrid pipeline scores 0.80 nDCG@10 and 0.75 Recall@10 against grep-based and embedding-only baselines. Full methodology and reproduction steps: [docs/benchmarks.md](docs/benchmarks.md).
+Most code search stops at embedding similarity, which falls apart on intent queries like `"where does request validation happen"`. Vera's cross-encoder reads query and candidate together as a pair, scoring them jointly: 0.60 MRR@10 vs 0.28 for vector-only.
+
+### Benchmarked against real workloads
+
+17 tasks across three real codebases (ripgrep, flask, fastify). Vera's hybrid pipeline scores 0.80 nDCG@10 and 0.75 Recall@10 against grep-based and embedding-only baselines. Full methodology: [docs/benchmarks.md](docs/benchmarks.md).
 
 ## Features
 
-**Tree-sitter structural parsing.** Vera uses tree-sitter grammars for 60+ languages, extracting functions, classes, methods, structs, and other symbols as discrete chunks rather than splitting files by line count. Search with `--type function --json` and get back precisely the function definitions matching your query, not a list of matching lines with no context boundaries.
+### Tree-sitter structural parsing
 
-**Any model.** Point Vera at any OpenAI-compatible embedding or reranker endpoint, whether that's a remote API or a local server like llama.cpp. Everything else (indexing, storage, search logic) stays on your machine regardless, no cloud hosted services needed. If you don't want to manage models at all, `vera setup` downloads two curated ONNX models that run locally, giving you the full three-stage pipeline without any network calls. Details in the [Model Backend](#model-backend) section.
+Vera uses tree-sitter grammars for 60+ languages, extracting functions, classes, methods, and structs as discrete chunks. Search with `--type function --json` and get back precisely the function definitions matching your query, not lines with no context boundaries.
 
-**Structured JSON output.** Every search result includes the file path, exact line range, full source content, symbol name, symbol type, language, and relevance score. Agents and scripts can consume this directly without parsing or guessing at context boundaries. A CLI skill file is included so agents know when and how to invoke Vera: [skills/vera/SKILL.md](skills/vera/SKILL.md).
+### Model-agnostic, local-first
+
+Point Vera at any OpenAI-compatible embedding or reranker endpoint, remote or local. Everything else (indexing, storage, search logic) stays on your machine regardless, no cloud hosted services needed. Or run `vera setup` to download two curated ONNX models for the full pipeline without any network calls. Details: [Model Backend](#model-backend).
+
+### Structured JSON output
+
+Every result includes file path, line range, source content, symbol name, type, language, and relevance score. Agents and scripts consume this directly. A CLI skill file is included: [skills/vera/SKILL.md](skills/vera/SKILL.md).
 
 ## Installation
 
