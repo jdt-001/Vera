@@ -7,7 +7,7 @@ Vera keeps the same core hybrid stack:
 - Reciprocal Rank Fusion to merge both lists
 - a cross-encoder reranker for final ordering
 
-What changed by `v0.6.0` is that retrieval is no longer just "BM25 + vector + rerank". The pipeline now includes deterministic query-aware ranking and candidate shaping between fusion and final reranking.
+What changed by `v0.7.0` is that retrieval is no longer just "BM25 + vector + rerank". The pipeline now includes deterministic query-aware ranking and candidate shaping between fusion and final reranking.
 
 ## Decision
 
@@ -35,7 +35,7 @@ The main failure modes were:
 - broad natural-language queries over-weighting docs, tests, and narrow helpers
 - local reranker instability when ONNX CUDA batches were too large
 
-The benchmark improvements from `v0.4.0` to `v0.6.0` show that these issues were better solved by candidate shaping and ranking than by replacing the entire retrieval stack.
+The benchmark improvements from `v0.4.0` to `v0.7.0` show that these issues were better solved by candidate shaping and ranking than by replacing the entire retrieval stack.
 
 ## Trade-offs
 

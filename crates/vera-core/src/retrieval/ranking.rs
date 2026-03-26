@@ -343,12 +343,11 @@ fn score_prior(features: &QueryFeatures, result: &SearchResult, stage: RankingSt
         && allow_filename_semantic_bonus
     {
         let normalized_stem = normalize_token(stem_overlap);
-        if features.keywords.contains(&normalized_stem) {
-            bonus += stage_weight * 0.6;
-        } else if features
-            .keywords
-            .iter()
-            .any(|keyword| shares_keyword_stem(&normalized_stem, keyword))
+        if features.keywords.contains(&normalized_stem)
+            || features
+                .keywords
+                .iter()
+                .any(|keyword| shares_keyword_stem(&normalized_stem, keyword))
         {
             bonus += stage_weight * 0.6;
         }

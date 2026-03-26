@@ -51,7 +51,7 @@ Vera ships as one static binary with all 60+ language grammars compiled in via t
 
 ### High accuracy, extremely fast, proven on real codebases
 
-21 tasks across four real codebases (`ripgrep`, `flask`, `fastify`, `turborepo`). On the current local Jina CUDA ONNX benchmark, Vera v0.6.0 reaches `0.9832` nDCG@10 with `1.0` Recall@5, `1.0` Recall@10, and `1.0` MRR@10. See [Benchmark Snapshot](#benchmark-snapshot) for the release comparison.
+21 tasks across four real codebases (`ripgrep`, `flask`, `fastify`, `turborepo`). On the current local Jina CUDA ONNX benchmark, Vera v0.7.0 reaches `0.8361` nDCG@10 with `0.78` Recall@5, `0.83` Recall@10, and `0.91` MRR@10. See [Benchmark Snapshot](#benchmark-snapshot) for the release comparison.
 
 ## Features
 
@@ -269,7 +269,7 @@ Sample JSON output (`--json`):
 
 ## Benchmark Snapshot
 
-The public comparison snapshot below is older and reflects the `v0.4.0` era pipeline and nearby public runs, not the current `v0.6.0` retrieval quality. It is kept here because it compares Vera against other tools on the same workload. Since then, Vera's local 21-task release benchmark improved from `0.2421` to `0.8135` Recall@1 and from `0.5016` to `1.0000` MRR@10. More detail: [`v0.6.0` accuracy improvements](docs/releases/v0.6.0-accuracy-improvements.md).
+The public comparison snapshot below is older and reflects the `v0.4.0` era pipeline and nearby public runs, not the current `v0.7.0` retrieval quality. It is kept here because it compares Vera against other tools on the same workload. Since then, Vera's local 21-task release benchmark improved from `0.2421` to `0.7183` Recall@1 and from `0.5016` to `0.9095` MRR@10. More detail: [`v0.7.0` accuracy improvements](docs/releases/v0.7.0-accuracy-improvements.md).
 
 The older public benchmark suite covers 17 tasks across three open-source codebases (`ripgrep`, `flask`, `fastify`) and five workload categories: symbol lookup, intent search, cross-file discovery, config lookup, and disambiguation.
 
@@ -282,15 +282,13 @@ The older public benchmark suite covers 17 tasks across three open-source codeba
 
 #### Improvements Since `v0.4.0`
 
-The current local Jina CUDA ONNX release benchmark for `v0.6.0` uses 21 tasks across `ripgrep`, `flask`, `fastify`, and `turborepo`:
+The current local Jina CUDA ONNX release benchmark for `v0.7.0` uses 21 tasks across `ripgrep`, `flask`, `fastify`, and `turborepo`:
 
 | Version | Recall@1 | Recall@5 | Recall@10 | MRR@10 | nDCG@10 |
 |--------|----------|----------|-----------|--------|---------|
 | `v0.4.0` | 0.2421 | 0.5040 | 0.5159 | 0.5016 | 0.4570 |
 | `v0.5.0` | 0.3135 | 0.5635 | 0.6349 | 0.5452 | 0.5293 |
-| `v0.6.0` | **0.8135** | **1.0000** | **1.0000** | **1.0000** | **0.9832** |
-
-`Recall@1 = 0.8135` is the ceiling for that suite because several tasks have multiple ground-truth targets.
+| `v0.7.0` | **0.7183** | **0.7778** | **0.8254** | **0.9095** | **0.8361** |
 
 More detail: [docs/benchmarks.md](docs/benchmarks.md) · [benchmarks/indexing-performance.md](benchmarks/indexing-performance.md) · [benchmarks/reports/reproduction-guide.md](benchmarks/reports/reproduction-guide.md)
 

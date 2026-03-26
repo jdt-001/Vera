@@ -289,10 +289,8 @@ fn extract_imports(chunk: &Chunk) -> Vec<String> {
             Some(rest)
         } else if let Some(rest) = trimmed.strip_prefix("from ") {
             Some(rest)
-        } else if let Some(rest) = trimmed.strip_prefix("#include ") {
-            Some(rest)
         } else {
-            None
+            trimmed.strip_prefix("#include ")
         };
 
         if let Some(rest) = remainder {
@@ -303,7 +301,7 @@ fn extract_imports(chunk: &Chunk) -> Vec<String> {
                 .trim_matches('<')
                 .trim_matches('>');
             let normalized = cleaned
-                .split(|c: char| matches!(c, '{' | '}' | '(' | ')' | ',' | ';'))
+                .split(['{', '}', '(', ')', ',', ';'])
                 .flat_map(|segment| segment.split_whitespace())
                 .filter(|segment| !segment.is_empty() && *segment != "as")
                 .take(8)
