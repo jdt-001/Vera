@@ -52,6 +52,17 @@ jobs:
         with:
           key: ${{ matrix.target }}
 
+      - name: Set up sccache
+        if: ${{ !matrix.use_cross }}
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Configure sccache
+        if: ${{ !matrix.use_cross }}
+        shell: bash
+        run: |
+          echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
+          echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
+
       - name: Download vendored grammars
         shell: bash
         run: bash scripts/bootstrap-vendored-grammars.sh
