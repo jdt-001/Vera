@@ -14,7 +14,7 @@
 
 ### `parsing/`: Language parsing & symbol extraction
 
-Files: `mod.rs` (public API), `languages.rs` (grammar dispatch), `extractor.rs` (AST node → SymbolType), `chunker.rs` (symbol-aware chunking).
+Files: `mod.rs` (public API), `languages.rs` (grammar dispatch), `extractor.rs` (AST node → SymbolType), `chunker.rs` (symbol-aware, whole-file, and Tier 0 chunking).
 
 Data flow: file → grammar lookup → tree-sitter parse → node classification → chunk production.
 
@@ -31,8 +31,9 @@ Data flow: file → grammar lookup → tree-sitter parse → node classification
 1. Query enters `search_service.rs`
 2. BM25 (`bm25.rs`) and vector search (`vector.rs`) run in parallel
 3. Results fused via RRF (`hybrid.rs`, k=60)
-4. Top 30 candidates reranked by cross-encoder (`reranker.rs` or `local_reranker.rs`)
-5. Final `Vec<SearchResult>` returned
+4. Query-aware ranking and candidate shaping apply deterministic priors (`ranking.rs`, `search_service.rs`)
+5. Top candidates reranked by cross-encoder (`reranker.rs` or `local_reranker.rs`)
+6. Final `Vec<SearchResult>` returned
 
 ### `storage/`: Persistent storage
 

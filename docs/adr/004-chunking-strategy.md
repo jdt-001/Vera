@@ -1,6 +1,15 @@
 # Chunking: Symbol-Aware via Tree-Sitter
 
-Each top-level symbol (function, class, struct, impl, trait, enum, interface) becomes one chunk. Unsupported languages fall back to sliding-window (50 lines, 10-line overlap).
+The core rule is still symbol-aware chunking: functions, classes, structs, traits, interfaces, enums, and other structural containers become retrieval units instead of arbitrary line windows.
+
+The current implementation also adds:
+
+- whole-file chunks for config and document-like files
+- gap chunks for module-level code between symbols
+- preserved structural containers such as Rust `impl` blocks and Python class definitions
+- large-symbol splitting when a symbol exceeds the configured chunk limit
+
+Unsupported languages still fall back to sliding-window chunking (50 lines, 10-line overlap).
 
 ## Evaluation
 
