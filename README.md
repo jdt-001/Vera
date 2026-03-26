@@ -192,12 +192,12 @@ Local mode runs a 239M-parameter neural network on your machine to generate embe
 | CPU | Ryzen 5 7600X3D (6c/12t) | ~6 min | Compute-bound, scales with core count |
 | API mode | Remote GPU | ~30 s | Requires API key, no local compute |
 
-**Why CPU takes minutes:** Each of the ~3,100 code chunks passes through the embedding model individually. This is the same work a GPU does in seconds — CPUs just do matrix math slower. After the initial index, `vera update .` only re-embeds changed files, so subsequent updates are fast.
+**Why CPU takes minutes:** These models (239M embedding + 278M reranker) are neural networks designed for GPU inference — they work on CPU, but that's not their intended target. Each of the ~3,100 code chunks passes through the model, doing the same matrix math a GPU handles in seconds. CPUs simply aren't built for this workload at scale. After the initial index, `vera update .` only re-embeds changed files, so subsequent updates are fast.
 
 **Speeding it up:**
 - **Use `--onnx-jina-cuda`** if you have an NVIDIA GPU — 40x faster than CPU
 - **Use API mode** (`vera setup --api`) for ~30s indexing with no local compute
-- More CPU cores and newer architectures (AVX-512/VNNI) help, but GPU or API mode is the real fix for large repos
+- CPU mode is fine for small repos or incremental updates, but for initial indexing of large codebases, GPU or API mode is strongly recommended
 
 ### Any OpenAI-Compatible Endpoint
 
