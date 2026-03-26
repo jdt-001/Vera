@@ -1,5 +1,6 @@
 secrets.env
 /AGENTS.md
+.junie/
 .bench/
 target/
 .vera/
