@@ -15,6 +15,11 @@
 pub mod discovery;
 pub mod embedding;
 
+/// Install the rustls crypto provider (ring). Safe to call multiple times.
+pub fn init_tls() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+}
+
 pub mod indexing;
 pub mod parsing;
 pub mod retrieval;

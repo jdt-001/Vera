@@ -60,11 +60,7 @@ jobs:
         if: matrix.use_cross
         run: cargo install cross --locked
 
-      - name: Set up MSVC environment
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
-
-      - name: Set MSVC build flags
+      - name: Set MSVC CRT flags
         if: runner.os == 'Windows'
         shell: bash
         run: |
