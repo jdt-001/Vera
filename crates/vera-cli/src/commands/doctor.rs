@@ -53,7 +53,7 @@ pub fn run(json_output: bool) -> anyhow::Result<()> {
     if local_mode {
         checks.push(DoctorCheck {
             name: "onnx-runtime",
-            status: if vera_core::local_models::ensure_ort_runtime().is_ok() {
+            status: if vera_core::local_models::ensure_ort_runtime(None).is_ok() {
                 CheckStatus::Ok
             } else {
                 CheckStatus::Fail

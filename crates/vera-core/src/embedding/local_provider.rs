@@ -20,9 +20,17 @@ pub struct LocalEmbeddingProvider {
 
 impl LocalEmbeddingProvider {
     pub async fn new() -> Result<Self, EmbeddingError> {
-        crate::local_models::ensure_ort_runtime().map_err(|e| EmbeddingError::ApiError {
-            status: 500,
-            message: e.to_string(),
+        let ort_path = crate::local_models::ensure_ort_library()
+            .await
+            .map_err(|e| EmbeddingError::ApiError {
+                status: 500,
+                message: e.to_string(),
+            })?;
+        crate::local_models::ensure_ort_runtime(Some(&ort_path)).map_err(|e| {
+            EmbeddingError::ApiError {
+                status: 500,
+                message: e.to_string(),
+            }
         })?;
 
         let onnx_path = ensure_model_file(EMBEDDING_REPO, ONNX_FILE)
@@ -230,7 +238,7 @@ mod tests {
     #[tokio::test]
     async fn test_local_embedding_provider() {
         // Skip if ONNX Runtime is not installed (requires libonnxruntime.so)
-        if crate::local_models::ensure_ort_runtime().is_err() {
+        if crate::local_models::ensure_ort_runtime(None).is_err() {
             eprintln!("Skipping: ONNX Runtime not available");
             return;
         }

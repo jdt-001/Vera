@@ -29,7 +29,8 @@ vera doctor
 Common causes:
 
 - Models haven't been downloaded yet — run `vera setup`
-- ONNX Runtime issue — `vera doctor` will flag this
+- ONNX Runtime auto-download failed — check network, or set `ORT_DYLIB_PATH` to a manually installed library
+- `vera doctor` will flag missing models or runtime
 
 ## API mode isn't working
 

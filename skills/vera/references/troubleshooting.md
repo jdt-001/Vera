@@ -37,7 +37,7 @@ vera doctor
 
 Common causes:
 
-- ONNX Runtime is missing
+- ONNX Runtime auto-download failed (check network, or set `ORT_DYLIB_PATH`)
 - local model assets have not been downloaded yet
 
 Helpful commands:

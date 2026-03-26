@@ -18,9 +18,17 @@ pub struct LocalReranker {
 
 impl LocalReranker {
     pub async fn new() -> Result<Self, RerankerError> {
-        crate::local_models::ensure_ort_runtime().map_err(|e| RerankerError::ApiError {
-            status: 500,
-            message: e.to_string(),
+        let ort_path = crate::local_models::ensure_ort_library()
+            .await
+            .map_err(|e| RerankerError::ApiError {
+                status: 500,
+                message: e.to_string(),
+            })?;
+        crate::local_models::ensure_ort_runtime(Some(&ort_path)).map_err(|e| {
+            RerankerError::ApiError {
+                status: 500,
+                message: e.to_string(),
+            }
         })?;
 
         let onnx_path = ensure_model_file(RERANKER_REPO, ONNX_FILE)
@@ -201,7 +209,7 @@ mod tests {
     #[tokio::test]
     async fn test_local_reranker() {
         // Skip if ONNX Runtime is not installed (requires libonnxruntime.so)
-        if crate::local_models::ensure_ort_runtime().is_err() {
+        if crate::local_models::ensure_ort_runtime(None).is_err() {
             eprintln!("Skipping: ONNX Runtime not available");
             return;
         }
