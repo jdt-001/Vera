@@ -184,14 +184,20 @@ Vera downloads the matching ONNX Runtime build automatically. The same flag work
 
 #### Local Inference Speed
 
-Indexing ~3,100 chunks (Vera's own codebase, 239 files):
+Local mode runs a 239M-parameter neural network on your machine to generate embeddings — this is real ML inference, not file I/O. The time is spent on matrix math, not reading files (file parsing takes <2s).
 
-| Backend | Hardware | Time |
-|---------|----------|------|
-| CUDA | RTX 4080 | **~8 s** |
-| CPU | Ryzen 5 7600X3D (6c/12t) | ~6 min |
+| Backend | Hardware | Time | Notes |
+|---------|----------|------|-------|
+| CUDA | RTX 4080 | **~8 s** | Recommended for large repos |
+| CPU | Ryzen 5 7600X3D (6c/12t) | ~6 min | Compute-bound, scales with core count |
+| API mode | Remote GPU | ~30 s | Requires API key, no local compute |
 
-CPU local inference is compute-bound, the 239M parameter model runs matrix multiplications for each chunk, and more cores with AVX-512/VNNI help. Expect slower times on older CPUs without AVX-512 or with fewer cores. GPU acceleration is recommended for large repos.
+**Why CPU takes minutes:** Each of the ~3,100 code chunks passes through the embedding model individually. This is the same work a GPU does in seconds — CPUs just do matrix math slower. After the initial index, `vera update .` only re-embeds changed files, so subsequent updates are fast.
+
+**Speeding it up:**
+- **Use `--onnx-jina-cuda`** if you have an NVIDIA GPU — 40x faster than CPU
+- **Use API mode** (`vera setup --api`) for ~30s indexing with no local compute
+- More CPU cores and newer architectures (AVX-512/VNNI) help, but GPU or API mode is the real fix for large repos
 
 ### Any OpenAI-Compatible Endpoint
 
