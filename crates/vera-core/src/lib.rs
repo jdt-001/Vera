@@ -12,6 +12,7 @@
 //! - [`storage`] — Persistent storage backends (SQLite + sqlite-vec, Tantivy).
 //! - [`embedding`] — Embedding generation via external API providers.
 
+pub mod chunk_text;
 pub mod discovery;
 pub mod embedding;
 

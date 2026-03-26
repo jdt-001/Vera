@@ -260,19 +260,38 @@ def precision_at_k(results: list[dict], ground_truth: list[dict], k: int) -> flo
     return relevant / len(top_k)
 
 
+def matched_relevances(results: list[dict], ground_truth: list[dict], k: int) -> list[int]:
+    """Assign each ranked result to at most one unmatched ground-truth entry."""
+    top_k = results[:k]
+    used = [False] * len(ground_truth)
+    relevances = []
+
+    for result in top_k:
+        best_idx = None
+        best_rel = 0
+        for idx, gt in enumerate(ground_truth):
+            if used[idx] or not is_match(result, gt):
+                continue
+            rel = gt.get("relevance", 1)
+            if rel > best_rel:
+                best_idx = idx
+                best_rel = rel
+
+        if best_idx is not None:
+            used[best_idx] = True
+            relevances.append(best_rel)
+        else:
+            relevances.append(0)
+
+    return relevances
+
+
 def ndcg_at_k(results: list[dict], ground_truth: list[dict], k: int) -> float:
     """Compute nDCG@k."""
     import math
 
-    top_k = results[:k]
-
-    # DCG
     dcg = 0.0
-    for i, result in enumerate(top_k):
-        relevance = max(
-            (gt.get("relevance", 1) for gt in ground_truth if is_match(result, gt)),
-            default=0,
-        )
+    for i, relevance in enumerate(matched_relevances(results, ground_truth, k)):
         dcg += relevance / math.log2(i + 2.0)
 
     # Ideal DCG
@@ -360,6 +379,7 @@ def run_benchmark(
                 "retrieval_metrics": metrics,
                 "latency_ms": latency_ms,
                 "result_count": len(results),
+                "results": results,
             }
             all_task_evals.append(eval_entry)
             all_latencies.append(latency_ms)
@@ -387,6 +407,7 @@ def run_benchmark(
                     "retrieval_metrics": avg_metrics,
                     "latency_ms": avg_latency,
                     "result_count": evals[0]["result_count"],
+                    "results": evals[0]["results"],
                 }
             )
         per_task = averaged_evals

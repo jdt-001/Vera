@@ -304,6 +304,42 @@ impl Language {
             _ => Self::Unknown,
         }
     }
+
+    /// Whether this language is best indexed as a whole-file document chunk.
+    ///
+    /// Config and prose formats tend to answer queries about the file as a
+    /// whole ("Cargo.toml workspace configuration"), where splitting into
+    /// small windows loses the strongest lexical/path signal.
+    pub fn prefers_file_chunking(self) -> bool {
+        matches!(
+            self,
+            Self::Toml
+                | Self::Yaml
+                | Self::Json
+                | Self::Markdown
+                | Self::Ini
+                | Self::Nginx
+                | Self::Makefile
+                | Self::Dockerfile
+                | Self::CMake
+        )
+    }
+
+    /// Whether this language is primarily document/config oriented.
+    pub fn is_document_like(self) -> bool {
+        matches!(
+            self,
+            Self::Toml
+                | Self::Yaml
+                | Self::Json
+                | Self::Markdown
+                | Self::Ini
+                | Self::Nginx
+                | Self::Makefile
+                | Self::Dockerfile
+                | Self::CMake
+        )
+    }
 }
 
 impl std::fmt::Display for Language {

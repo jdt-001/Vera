@@ -10,7 +10,7 @@ use tracing::warn;
 
 use crate::config::{InferenceBackend, VeraConfig};
 use crate::retrieval::hybrid::compute_vector_candidates;
-use crate::retrieval::query_classifier::{classify_query, params_for_query_type};
+use crate::retrieval::query_classifier::{QueryType, classify_query, params_for_query_type};
 use crate::retrieval::{apply_filters, search_bm25, search_hybrid, search_hybrid_reranked};
 use crate::types::{SearchFilters, SearchResult};
 
@@ -91,16 +91,16 @@ pub fn execute_search(
             None
         });
 
-    let rerank_candidates = config.retrieval.rerank_candidates;
-
     // Classify query to adapt fusion parameters.
     let query_type = classify_query(query);
     let query_params = params_for_query_type(query_type);
     let rrf_k = query_params.rrf_k;
-    let vector_candidates =
-        compute_vector_candidates(fetch_limit, query_params.vector_candidate_multiplier);
+    let vector_candidates = effective_vector_candidates(fetch_limit, query_params, query);
+    let rerank_candidates =
+        effective_rerank_candidates(config.retrieval.rerank_candidates, fetch_limit, query);
+    let skip_reranker = should_skip_reranker(query, query_type);
 
-    let results = if let Some(ref reranker) = reranker {
+    let results = if let Some(ref reranker) = reranker.filter(|_| !skip_reranker) {
         rt.block_on(search_hybrid_reranked(
             index_dir,
             &provider,
@@ -139,6 +139,78 @@ fn compute_fetch_limit(filters: &SearchFilters, result_limit: usize) -> usize {
     }
 }
 
+fn effective_vector_candidates(
+    fetch_limit: usize,
+    query_params: crate::retrieval::query_classifier::QueryParams,
+    query: &str,
+) -> usize {
+    let mut candidates =
+        compute_vector_candidates(fetch_limit, query_params.vector_candidate_multiplier);
+
+    if needs_broader_candidate_pool(query, classify_query(query)) {
+        candidates = candidates.max(fetch_limit.saturating_mul(6));
+    }
+
+    candidates
+}
+
+fn effective_rerank_candidates(base: usize, fetch_limit: usize, query: &str) -> usize {
+    let mut candidates = base.max(fetch_limit);
+
+    if needs_broader_candidate_pool(query, classify_query(query)) {
+        candidates = candidates.max(fetch_limit.saturating_mul(2));
+    }
+
+    candidates
+}
+
+fn should_skip_reranker(query: &str, query_type: QueryType) -> bool {
+    query_type == QueryType::Identifier && is_path_weighted_query(query)
+}
+
+fn needs_broader_candidate_pool(query: &str, query_type: QueryType) -> bool {
+    if matches!(query_type, QueryType::NaturalLanguage) {
+        return true;
+    }
+
+    let lower = query.trim().to_ascii_lowercase();
+    [
+        "implementations",
+        "implementation",
+        "registered",
+        "registration",
+        "mounted",
+        "mounting",
+        "configured",
+        "configuration",
+        "across",
+        "schema",
+        "validation",
+        "route",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle))
+}
+
+fn is_path_weighted_query(query: &str) -> bool {
+    let lower = query.trim().to_ascii_lowercase();
+    [
+        "cargo.toml",
+        "pyproject.toml",
+        "package.json",
+        "tsconfig.json",
+        "dockerfile",
+        "makefile",
+        "cmakelists.txt",
+        "nginx.conf",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle))
+        || [".toml", ".json", ".yaml", ".yml", ".ini", ".md", ".conf"]
+            .iter()
+            .any(|suffix| lower.contains(suffix))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -164,7 +236,16 @@ mod tests {
 
         // This will attempt to create local provider and should fail at mismatch
         {
-            let res = execute_search(index_dir, "test", &config, &filters, 10, crate::config::InferenceBackend::OnnxJina(crate::config::OnnxExecutionProvider::Cpu));
+            let res = execute_search(
+                index_dir,
+                "test",
+                &config,
+                &filters,
+                10,
+                crate::config::InferenceBackend::OnnxJina(
+                    crate::config::OnnxExecutionProvider::Cpu,
+                ),
+            );
             assert!(res.is_err());
             let err_msg = res.unwrap_err().to_string();
             // With load-dynamic ort, if ONNX Runtime is not present the error will be
@@ -196,7 +277,38 @@ mod tests {
         // It will pass the metadata check (model_name matches), skip mismatch check (expected_dim is None),
         // infer stored_dim = 123, and proceed to search.
         // Since the index is empty, it will return Ok([]) without making network calls.
-        let res = execute_search(index_dir, "test", &config, &filters, 10, crate::config::InferenceBackend::Api);
+        let res = execute_search(
+            index_dir,
+            "test",
+            &config,
+            &filters,
+            10,
+            crate::config::InferenceBackend::Api,
+        );
         assert!(res.is_ok(), "Expected Ok but got {:?}", res);
+    }
+
+    #[test]
+    fn skips_reranker_for_filename_queries() {
+        assert!(should_skip_reranker(
+            "Cargo.toml workspace configuration",
+            QueryType::Identifier
+        ));
+        assert!(!should_skip_reranker(
+            "where is the workspace configured",
+            QueryType::NaturalLanguage
+        ));
+    }
+
+    #[test]
+    fn broader_queries_expand_candidates() {
+        assert!(effective_rerank_candidates(50, 10, "Sink trait and its implementations") >= 50);
+        assert!(
+            effective_vector_candidates(
+                10,
+                params_for_query_type(QueryType::NaturalLanguage),
+                "request validation and schema enforcement"
+            ) >= 60
+        );
     }
 }

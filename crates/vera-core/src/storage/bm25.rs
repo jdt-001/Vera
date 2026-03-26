@@ -11,6 +11,8 @@ use tantivy::query::QueryParser;
 use tantivy::schema::{STORED, STRING, Schema, TEXT, Value};
 use tantivy::{Index, IndexWriter, ReloadPolicy, TantivyDocument, doc};
 
+use crate::chunk_text;
+
 /// Tantivy-backed BM25 full-text search index.
 pub struct Bm25Index {
     index: Index,
@@ -76,11 +78,25 @@ impl Bm25Index {
 
         for doc_data in docs {
             let sym_name = doc_data.symbol_name.unwrap_or("");
+            let chunk = crate::types::Chunk {
+                id: doc_data.chunk_id.to_string(),
+                file_path: doc_data.file_path.to_string(),
+                line_start: 0,
+                line_end: 0,
+                content: doc_data.content.to_string(),
+                language: doc_data
+                    .language
+                    .parse()
+                    .unwrap_or(crate::types::Language::Unknown),
+                symbol_type: None,
+                symbol_name: doc_data.symbol_name.map(ToString::to_string),
+            };
+            let searchable_text = chunk_text::build_bm25_text(&chunk);
             writer
                 .add_document(doc!(
                     self.schema.chunk_id => doc_data.chunk_id.to_string(),
                     self.schema.file_path => doc_data.file_path.to_string(),
-                    self.schema.content => doc_data.content.to_string(),
+                    self.schema.content => searchable_text,
                     self.schema.symbol_name => sym_name.to_string(),
                     self.schema.language => doc_data.language.to_string(),
                 ))
@@ -267,6 +283,13 @@ mod tests {
                 symbol_name: Some("handleRequest"),
                 language: "typescript",
             },
+            Bm25Document {
+                chunk_id: "Cargo.toml:0",
+                file_path: "Cargo.toml",
+                content: "[workspace]\nmembers = [\"crates/vera-core\"]\nresolver = \"2\"",
+                symbol_name: Some("Cargo.toml"),
+                language: "toml",
+            },
         ]
     }
 
@@ -274,7 +297,7 @@ mod tests {
     fn insert_and_count() {
         let index = Bm25Index::open_in_memory().unwrap();
         index.insert_batch(&sample_docs()).unwrap();
-        assert_eq!(index.doc_count().unwrap(), 4);
+        assert_eq!(index.doc_count().unwrap(), 5);
     }
 
     #[test]
@@ -345,10 +368,10 @@ mod tests {
     fn delete_by_chunk_id() {
         let index = Bm25Index::open_in_memory().unwrap();
         index.insert_batch(&sample_docs()).unwrap();
-        assert_eq!(index.doc_count().unwrap(), 4);
+        assert_eq!(index.doc_count().unwrap(), 5);
 
         index.delete_by_chunk_id("src/main.rs:0").unwrap();
-        assert_eq!(index.doc_count().unwrap(), 3);
+        assert_eq!(index.doc_count().unwrap(), 4);
     }
 
     #[test]
@@ -369,5 +392,17 @@ mod tests {
         assert!(!results.is_empty());
         let found = results.iter().any(|r| r.chunk_id == "src/server.ts:0");
         assert!(found, "handleRequest should be found");
+    }
+
+    #[test]
+    fn filename_queries_rank_config_files() {
+        let index = Bm25Index::open_in_memory().unwrap();
+        index.insert_batch(&sample_docs()).unwrap();
+
+        let results = index
+            .search("Cargo.toml workspace configuration", 10)
+            .unwrap();
+        assert!(!results.is_empty());
+        assert_eq!(results[0].chunk_id, "Cargo.toml:0");
     }
 }

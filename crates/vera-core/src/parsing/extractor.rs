@@ -1412,8 +1412,17 @@ fn extract_impl_methods(
     lang: Language,
     symbols: &mut Vec<RawSymbol>,
 ) {
+    let name = extract_name(&impl_node, source);
+    symbols.push(RawSymbol {
+        name,
+        symbol_type: SymbolType::Block,
+        start_byte: impl_node.start_byte(),
+        end_byte: impl_node.end_byte(),
+        start_row: impl_node.start_position().row,
+        end_row: impl_node.end_position().row,
+    });
+
     let mut cursor = impl_node.walk();
-    let mut found_methods = false;
 
     for child in impl_node.children(&mut cursor) {
         if child.kind() == "declaration_list" {
@@ -1429,7 +1438,6 @@ fn extract_impl_methods(
                         start_row: item.start_position().row,
                         end_row: item.end_position().row,
                     });
-                    found_methods = true;
                 } else if let Some(sym_type) = classify_node(lang, item.kind()) {
                     let name = extract_name(&item, source);
                     symbols.push(RawSymbol {
@@ -1440,23 +1448,9 @@ fn extract_impl_methods(
                         start_row: item.start_position().row,
                         end_row: item.end_position().row,
                     });
-                    found_methods = true;
                 }
             }
         }
-    }
-
-    // If impl has no methods, capture the whole block
-    if !found_methods {
-        let name = extract_name(&impl_node, source);
-        symbols.push(RawSymbol {
-            name,
-            symbol_type: SymbolType::Block,
-            start_byte: impl_node.start_byte(),
-            end_byte: impl_node.end_byte(),
-            start_row: impl_node.start_position().row,
-            end_row: impl_node.end_position().row,
-        });
     }
 }
 
@@ -1464,15 +1458,22 @@ fn extract_impl_methods(
 ///
 /// Similar to how Rust `impl` methods are extracted: the class body is
 /// walked for `function_definition` nodes (methods) which become individual
-/// [`Method`] chunks. The class header (up to the first method) and any
-/// inter-method class-level code will be captured as gap chunks by the
-/// chunker. If the class has no methods, the whole class is kept as one chunk.
+/// [`Method`] chunks, while the class itself remains indexable as a full
+/// [`Class`] symbol for definition-oriented queries.
 fn extract_python_class_methods(
     class_node: tree_sitter::Node<'_>,
     source: &[u8],
     symbols: &mut Vec<RawSymbol>,
 ) {
-    let mut found_methods = false;
+    let name = extract_name(&class_node, source);
+    symbols.push(RawSymbol {
+        name,
+        symbol_type: SymbolType::Class,
+        start_byte: class_node.start_byte(),
+        end_byte: class_node.end_byte(),
+        start_row: class_node.start_position().row,
+        end_row: class_node.end_position().row,
+    });
 
     // The class body is a `block` child.
     let mut cursor = class_node.walk();
@@ -1491,7 +1492,6 @@ fn extract_python_class_methods(
                         start_row: item.start_position().row,
                         end_row: item.end_position().row,
                     });
-                    found_methods = true;
                 }
                 // Decorated methods: decorated_definition > function_definition
                 else if item.kind() == "decorated_definition" {
@@ -1509,25 +1509,11 @@ fn extract_python_class_methods(
                                 start_row: item.start_position().row,
                                 end_row: item.end_position().row,
                             });
-                            found_methods = true;
                         }
                     }
                 }
             }
         }
-    }
-
-    // If class has no methods, keep the entire class as one chunk.
-    if !found_methods {
-        let name = extract_name(&class_node, source);
-        symbols.push(RawSymbol {
-            name,
-            symbol_type: SymbolType::Class,
-            start_byte: class_node.start_byte(),
-            end_byte: class_node.end_byte(),
-            start_row: class_node.start_position().row,
-            end_row: class_node.end_position().row,
-        });
     }
 }
 
@@ -1675,15 +1661,17 @@ impl Point {
 
     fn distance(&self) -> f64 {
         (self.x * self.x + self.y * self.y).sqrt()
-    }
+        }
 }
 "#;
         let symbols = parse_and_extract(source, Language::Rust);
-        assert_eq!(symbols.len(), 2);
-        assert_eq!(symbols[0].symbol_type, SymbolType::Method);
-        assert_eq!(symbols[0].name.as_deref(), Some("new"));
+        assert_eq!(symbols.len(), 3);
+        assert_eq!(symbols[0].symbol_type, SymbolType::Block);
+        assert_eq!(symbols[0].name.as_deref(), Some("Point"));
         assert_eq!(symbols[1].symbol_type, SymbolType::Method);
-        assert_eq!(symbols[1].name.as_deref(), Some("distance"));
+        assert_eq!(symbols[1].name.as_deref(), Some("new"));
+        assert_eq!(symbols[2].symbol_type, SymbolType::Method);
+        assert_eq!(symbols[2].name.as_deref(), Some("distance"));
     }
 
     #[test]
@@ -1714,14 +1702,16 @@ class MyClass:
         return self.x
 "#;
         let symbols = parse_and_extract(source, Language::Python);
-        // Should extract: hello (function), __init__ (method), method (method)
-        assert_eq!(symbols.len(), 3);
+        // Should extract: hello (function), MyClass (class), __init__ (method), method (method)
+        assert_eq!(symbols.len(), 4);
         assert_eq!(symbols[0].symbol_type, SymbolType::Function);
         assert_eq!(symbols[0].name.as_deref(), Some("hello"));
-        assert_eq!(symbols[1].symbol_type, SymbolType::Method);
-        assert_eq!(symbols[1].name.as_deref(), Some("__init__"));
+        assert_eq!(symbols[1].symbol_type, SymbolType::Class);
+        assert_eq!(symbols[1].name.as_deref(), Some("MyClass"));
         assert_eq!(symbols[2].symbol_type, SymbolType::Method);
-        assert_eq!(symbols[2].name.as_deref(), Some("method"));
+        assert_eq!(symbols[2].name.as_deref(), Some("__init__"));
+        assert_eq!(symbols[3].symbol_type, SymbolType::Method);
+        assert_eq!(symbols[3].name.as_deref(), Some("method"));
     }
 
     #[test]
@@ -1750,11 +1740,13 @@ class MyClass:
         return self._value
 "#;
         let symbols = parse_and_extract(source, Language::Python);
-        assert_eq!(symbols.len(), 2);
-        assert_eq!(symbols[0].symbol_type, SymbolType::Method);
-        assert_eq!(symbols[0].name.as_deref(), Some("static_method"));
+        assert_eq!(symbols.len(), 3);
+        assert_eq!(symbols[0].symbol_type, SymbolType::Class);
+        assert_eq!(symbols[0].name.as_deref(), Some("MyClass"));
         assert_eq!(symbols[1].symbol_type, SymbolType::Method);
-        assert_eq!(symbols[1].name.as_deref(), Some("value"));
+        assert_eq!(symbols[1].name.as_deref(), Some("static_method"));
+        assert_eq!(symbols[2].symbol_type, SymbolType::Method);
+        assert_eq!(symbols[2].name.as_deref(), Some("value"));
     }
 
     #[test]
@@ -2106,7 +2098,9 @@ trait Logger {}
 "#;
         let symbols = parse_and_extract(source, Language::Scala);
         println!("Scala symbols: {:#?}", symbols);
-        assert!(symbols.iter().any(|s| s.symbol_type == SymbolType::Function && s.name.as_deref() == Some("main")));
+        assert!(symbols
+            .iter()
+            .any(|s| s.symbol_type == SymbolType::Function && s.name.as_deref() == Some("main")));
         assert!(
             symbols
                 .iter()
@@ -2548,7 +2542,6 @@ CMD ["./app"]
 @end
 "#;
         let symbols = parse_and_extract(source, Language::ObjectiveC);
-        println!("ObjC symbols: {:#?}", symbols);
         assert!(!symbols.is_empty(), "ObjC should extract symbols");
         assert!(
             symbols.iter().any(|s| s.symbol_type == SymbolType::Class),

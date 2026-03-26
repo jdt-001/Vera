@@ -8,6 +8,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
+use crate::chunk_text;
 use crate::types::Chunk;
 
 // ── Error types ──────────────────────────────────────────────────────
@@ -504,8 +505,14 @@ pub async fn embed_chunks_concurrent<P: EmbeddingProvider>(
     let batch_inputs: Vec<BatchInput> = indexed_chunks
         .chunks(batch_size)
         .map(|batch| {
-            let ids: Vec<(usize, String)> = batch.iter().map(|(orig_idx, c)| (*orig_idx, c.id.clone())).collect();
-            let texts: Vec<String> = batch.iter().map(|(_, c)| chunk_to_embedding_text(c)).collect();
+            let ids: Vec<(usize, String)> = batch
+                .iter()
+                .map(|(orig_idx, c)| (*orig_idx, c.id.clone()))
+                .collect();
+            let texts: Vec<String> = batch
+                .iter()
+                .map(|(_, c)| chunk_to_embedding_text(c))
+                .collect();
             (ids, texts)
         })
         .collect();
@@ -560,25 +567,7 @@ pub async fn embed_chunks_concurrent<P: EmbeddingProvider>(
 /// Prepends metadata context (language, symbol info) to help the model
 /// produce more code-aware embeddings.
 fn chunk_to_embedding_text(chunk: &Chunk) -> String {
-    let mut parts = Vec::new();
-
-    // Add language context.
-    parts.push(format!("Language: {}", chunk.language));
-
-    // Add symbol info if available.
-    if let Some(ref sym_type) = chunk.symbol_type {
-        if let Some(ref sym_name) = chunk.symbol_name {
-            parts.push(format!("{sym_type} {sym_name}"));
-        }
-    }
-
-    // Add file path for context.
-    parts.push(format!("File: {}", chunk.file_path));
-
-    // Add the actual code content.
-    parts.push(chunk.content.clone());
-
-    parts.join("\n")
+    chunk_text::build_embedding_text(chunk)
 }
 
 // ── Sanitization ─────────────────────────────────────────────────────

@@ -217,6 +217,7 @@ mod tests {
                 retrieval_metrics: retrieval.clone(),
                 latency_ms: 10.0,
                 result_count: 5,
+                results: Vec::new(),
             }],
             per_category: HashMap::from([(
                 "symbol_lookup".to_string(),

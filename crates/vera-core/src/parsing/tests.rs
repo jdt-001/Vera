@@ -60,6 +60,11 @@ impl Point {
         .find(|c| c.symbol_type == Some(SymbolType::Method));
     assert!(method.is_some(), "should have method chunk");
     assert_eq!(method.unwrap().symbol_name, Some("new".to_string()));
+
+    let impl_block = chunks
+        .iter()
+        .find(|c| c.symbol_type == Some(SymbolType::Block) && c.content.contains("impl Point"));
+    assert!(impl_block.is_some(), "should keep impl block chunk");
 }
 
 #[test]
@@ -133,6 +138,12 @@ class UserService:
         .find(|c| c.symbol_name == Some("get_user".to_string()));
     assert!(get_user.is_some(), "should find method get_user");
     assert_eq!(get_user.unwrap().symbol_type, Some(SymbolType::Method));
+
+    let class_chunk = chunks
+        .iter()
+        .find(|c| c.symbol_name == Some("UserService".to_string()));
+    assert!(class_chunk.is_some(), "should retain the class chunk");
+    assert_eq!(class_chunk.unwrap().symbol_type, Some(SymbolType::Class));
 }
 
 #[test]
@@ -425,11 +436,14 @@ fn unknown_language_uses_tier0() {
 }
 
 #[test]
-fn toml_uses_tier0() {
+fn toml_uses_whole_file_chunking() {
     let source = "[package]\nname = \"vera\"\nversion = \"0.1.0\"\n";
     let chunks = parse_and_chunk(source, "Cargo.toml", Language::Toml, &default_config()).unwrap();
-    assert!(!chunks.is_empty());
+    assert_eq!(chunks.len(), 1);
     assert_eq!(chunks[0].language, Language::Toml);
+    assert_eq!(chunks[0].symbol_name.as_deref(), Some("Cargo.toml"));
+    assert_eq!(chunks[0].line_start, 1);
+    assert_eq!(chunks[0].line_end, 3);
 }
 
 // =========================================================

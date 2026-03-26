@@ -135,6 +135,8 @@ pub struct TaskEvaluation {
     pub retrieval_metrics: RetrievalMetrics,
     pub latency_ms: f64,
     pub result_count: usize,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub results: Vec<RetrievalResult>,
 }
 
 /// Aggregate metrics across all tasks or a category.

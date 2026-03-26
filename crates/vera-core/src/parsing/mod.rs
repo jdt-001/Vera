@@ -42,6 +42,10 @@ pub fn parse_and_chunk(
     language: Language,
     config: &IndexingConfig,
 ) -> Result<Vec<Chunk>> {
+    if language.prefers_file_chunking() {
+        return Ok(chunker::whole_file_chunk(source, file_path, language));
+    }
+
     match languages::tree_sitter_grammar(language) {
         Some(grammar) => parse_with_treesitter(source, file_path, language, grammar, config),
         None => {

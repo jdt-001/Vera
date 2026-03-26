@@ -784,12 +784,15 @@ fn metadata_tier0_fallback_has_correct_metadata() {
     )
     .unwrap();
 
-    assert!(!chunks.is_empty(), "Tier 0 should produce chunks");
+    assert!(
+        !chunks.is_empty(),
+        "whole-file config chunk should be produced"
+    );
     let chunk = &chunks[0];
     assert_eq!(chunk.file_path, "config/settings.toml");
     assert_eq!(chunk.language, Language::Toml);
     assert_eq!(chunk.symbol_type, Some(SymbolType::Block));
-    assert!(chunk.symbol_name.is_none());
+    assert_eq!(chunk.symbol_name.as_deref(), Some("settings.toml"));
     assert_eq!(chunk.line_start, 1);
 }
 

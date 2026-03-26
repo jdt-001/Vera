@@ -18,6 +18,19 @@ fn is_match(result: &RetrievalResult, gt: &GroundTruthEntry) -> bool {
         && result.line_end >= gt.line_start
 }
 
+fn best_unmatched_ground_truth(
+    result: &RetrievalResult,
+    ground_truth: &[GroundTruthEntry],
+    used: &[bool],
+) -> Option<usize> {
+    ground_truth
+        .iter()
+        .enumerate()
+        .filter(|(idx, gt)| !used[*idx] && is_match(result, gt))
+        .max_by_key(|(_, gt)| gt.relevance)
+        .map(|(idx, _)| idx)
+}
+
 /// Compute Recall@k: fraction of ground truth items found in top-k results.
 pub fn recall_at_k(
     results: &[RetrievalResult],
@@ -58,21 +71,18 @@ pub fn mrr(results: &[RetrievalResult], ground_truth: &[GroundTruthEntry]) -> f6
 /// weighted by the ground truth entry's relevance score.
 pub fn ndcg(results: &[RetrievalResult], ground_truth: &[GroundTruthEntry], k: usize) -> f64 {
     let top_k = &results[..results.len().min(k)];
+    let mut used = vec![false; ground_truth.len()];
 
-    // Compute DCG: for each result, find the best matching ground truth relevance
-    let dcg: f64 = top_k
-        .iter()
-        .enumerate()
-        .map(|(i, result)| {
-            let relevance = ground_truth
-                .iter()
-                .filter(|gt| is_match(result, gt))
-                .map(|gt| gt.relevance as f64)
-                .reduce(f64::max)
-                .unwrap_or(0.0);
-            relevance / (i as f64 + 2.0).log2()
-        })
-        .sum();
+    // Compute DCG by assigning each result to at most one unmatched ground-truth
+    // target. This prevents multiple overlapping chunks from repeatedly
+    // claiming credit for the same relevant region.
+    let mut dcg = 0.0;
+    for (i, result) in top_k.iter().enumerate() {
+        if let Some(gt_idx) = best_unmatched_ground_truth(result, ground_truth, &used) {
+            used[gt_idx] = true;
+            dcg += ground_truth[gt_idx].relevance as f64 / (i as f64 + 2.0).log2();
+        }
+    }
 
     // Compute ideal DCG: sort ground truth by relevance descending
     let mut ideal_rels: Vec<f64> = ground_truth.iter().map(|gt| gt.relevance as f64).collect();
@@ -180,6 +190,7 @@ pub fn evaluate_tasks(tasks: &[BenchmarkTask], results: &[TaskResult]) -> Vec<Ta
                 retrieval_metrics,
                 latency_ms: task_result.latency_ms,
                 result_count: task_result.results.len(),
+                results: task_result.results.clone(),
             })
         })
         .collect()
@@ -337,6 +348,24 @@ mod tests {
     }
 
     #[test]
+    fn test_ndcg_duplicate_hits_do_not_exceed_one() {
+        let results = vec![make_result("a.rs", 1, 10), make_result("a.rs", 2, 9)];
+        let gt = vec![GroundTruthEntry {
+            file_path: "a.rs".to_string(),
+            line_start: 1,
+            line_end: 10,
+            relevance: 3,
+        }];
+
+        let score = ndcg(&results, &gt, 10);
+        assert!(score <= 1.0, "nDCG must stay <= 1.0, got {score}");
+        assert!(
+            (score - 1.0).abs() < 1e-10,
+            "first matching hit should still score perfectly"
+        );
+    }
+
+    #[test]
     fn test_percentile_basic() {
         let values = vec![1.0, 2.0, 3.0, 4.0, 5.0];
         assert_eq!(percentile(&values, 0.0), 1.0);
@@ -401,6 +430,7 @@ mod tests {
                 },
                 latency_ms: 10.0,
                 result_count: 5,
+                results: Vec::new(),
             },
             TaskEvaluation {
                 task_id: "t2".to_string(),
@@ -414,6 +444,7 @@ mod tests {
                 },
                 latency_ms: 20.0,
                 result_count: 10,
+                results: Vec::new(),
             },
         ];
         let perf = PerformanceMetrics {

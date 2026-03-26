@@ -115,6 +115,27 @@ pub fn chunks_from_symbols(
     chunks
 }
 
+/// Create a single whole-file chunk.
+///
+/// Used for config and document-like files where the filename and full file
+/// context are more important than symbol-level segmentation.
+pub fn whole_file_chunk(source: &str, file_path: &str, language: Language) -> Vec<Chunk> {
+    if source.trim().is_empty() {
+        return Vec::new();
+    }
+
+    vec![Chunk {
+        id: format!("{file_path}:0"),
+        file_path: file_path.to_string(),
+        line_start: 1,
+        line_end: source.lines().count().max(1) as u32,
+        content: source.to_string(),
+        language,
+        symbol_type: Some(SymbolType::Block),
+        symbol_name: Some(file_name(file_path).to_string()),
+    }]
+}
+
 /// Split a large symbol into sub-chunks of at most `max_lines` lines.
 ///
 /// Sub-chunks have no content gaps — every line of the symbol appears
@@ -200,6 +221,10 @@ pub fn tier0_line_chunks(source: &str, file_path: &str, language: Language) -> V
     }
 
     chunks
+}
+
+fn file_name(path: &str) -> &str {
+    path.rsplit(['/', '\\']).next().unwrap_or(path)
 }
 
 /// Join lines from `start_row` to `end_row` (inclusive, 0-based) into a string.
@@ -438,5 +463,14 @@ mod tests {
         let ids: Vec<_> = chunks.iter().map(|c| &c.id).collect();
         let unique: std::collections::HashSet<_> = ids.iter().collect();
         assert_eq!(ids.len(), unique.len(), "all chunk IDs should be unique");
+    }
+
+    #[test]
+    fn whole_file_chunk_uses_filename_as_symbol() {
+        let chunks = whole_file_chunk("[workspace]\nmembers = []\n", "Cargo.toml", Language::Toml);
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0].symbol_name.as_deref(), Some("Cargo.toml"));
+        assert_eq!(chunks[0].line_start, 1);
+        assert_eq!(chunks[0].line_end, 2);
     }
 }
