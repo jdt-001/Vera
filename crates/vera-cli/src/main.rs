@@ -12,6 +12,7 @@ mod commands;
 mod helpers;
 mod skill_assets;
 mod state;
+mod update_check;
 
 use std::process;
 
@@ -391,6 +392,11 @@ fn main() {
         process::exit(1);
     }
 
+    let show_nudges = !matches!(
+        cli.command,
+        Commands::Mcp | Commands::Agent { .. } | Commands::Uninstall
+    ) && !cli.json;
+
     let result = match cli.command {
         Commands::Mcp => {
             tracing::info!("starting MCP server");
@@ -475,6 +481,11 @@ fn main() {
             commands::config::run(&args, cli.json)
         }
     };
+
+    // Print update hints after the command runs (skip for MCP/agent/uninstall).
+    if show_nudges {
+        update_check::print_nudges();
+    }
 
     if let Err(err) = result {
         eprintln!("Error: {err:#}");

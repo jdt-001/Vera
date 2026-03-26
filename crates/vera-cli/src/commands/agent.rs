@@ -185,6 +185,10 @@ fn install_skill_to(target_dir: &Path) -> anyhow::Result<()> {
         fs::write(&path, file.contents)
             .with_context(|| format!("failed to write {}", path.display()))?;
     }
+    // Write a .version file so the CLI can detect stale skill installs.
+    let version_path = target_dir.join(".version");
+    fs::write(&version_path, env!("CARGO_PKG_VERSION"))
+        .with_context(|| format!("failed to write {}", version_path.display()))?;
     Ok(())
 }
 

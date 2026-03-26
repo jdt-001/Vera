@@ -133,6 +133,26 @@ vera agent install && vera setup
 
 </details>
 
+### Updating
+
+Vera checks for new releases once per day and prints a hint with the exact update command for your install method. To update manually:
+
+```bash
+bunx @vera-ai/cli install   # re-downloads latest binary + refreshes skill files
+```
+
+Or if you used a global install: `npm update -g @vera-ai/cli`, `pip install --upgrade vera-ai`, then `vera agent install` to refresh skill files.
+
+Set `VERA_NO_UPDATE_CHECK=1` to disable the automatic check.
+
+### Uninstalling
+
+```bash
+vera uninstall   # removes binary, models, config, skill files, and PATH shim
+```
+
+Per-project indexes (`.vera/`) are not removed. Delete them manually if needed.
+
 ## Model Backend
 
 Vera itself is always local: the index lives in `.vera/`, config in `~/.vera/`. The backend choice only affects where embeddings and reranking run.
