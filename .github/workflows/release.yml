@@ -124,6 +124,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Verify release versions
         shell: bash
@@ -206,6 +209,7 @@ jobs:
           BODY="${BODY}**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${TAG}"
 
           # Write to file for the release step
+          mkdir -p release
           echo -e "$BODY" > release/CHANGELOG.md
           cat release/CHANGELOG.md
 
