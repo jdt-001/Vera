@@ -33,23 +33,10 @@ Every decision made is intentional, with ample research, testing, analysis, benc
 ## Quick Start
 
 ```bash
-# Install
-npx -y @vera-ai/cli install    # or: bunx @vera-ai/cli install / uvx vera-ai install
-
-# Option A: use any OpenAI-compatible endpoint
-export EMBEDDING_MODEL_BASE_URL=https://your-api/v1
-export EMBEDDING_MODEL_ID=your-model
-export EMBEDDING_MODEL_API_KEY=your-key
-vera setup --api
-
-# Option B: download curated local models (no API needed)
-vera setup
-
-# Index and search
+bunx @vera-ai/cli install   # or: npx -y @vera-ai/cli install / uvx vera-ai install
+vera setup                   # downloads local models, no API needed
 vera index .
 vera search "authentication logic"
-vera search "error handling" --lang rust
-vera search "handler" --type function --limit 5 --json
 ```
 
 ## Why Vera is Better
@@ -79,85 +66,72 @@ Vera uses tree-sitter grammars for 60+ languages to extract functions, classes, 
 
 ### Structured, code-aware results
 
-Every result includes file path, line range, source content, symbol name, symbol type, language, and relevance score. Agents and scripts consume this directly without parsing. A CLI skill file is included for agent integration: [skills/vera/SKILL.md](skills/vera/SKILL.md).
+Every result includes file path, line range, source content, symbol name, symbol type, language, and relevance score. Agents and scripts consume this directly without parsing. See [AGENT-USAGE.md](AGENT-USAGE.md) for AI agent integration.
 
 ## Installation
 
-### Preferred: CLI + Skills
-
 ```bash
-npx -y @vera-ai/cli install
-bunx @vera-ai/cli install
-uvx vera-ai install
+bunx @vera-ai/cli install   # or: npx -y @vera-ai/cli install / uvx vera-ai install
 ```
 
-This installs the `vera` binary for your platform, adds a persistent `vera` command, and runs `vera agent install` for supported agent skill directories.
-
-Then set up and run your first search:
+This downloads the `vera` binary, adds it to your PATH, and installs agent skill files. After this, `vera` is a standalone command — you don't need `bunx`/`npx`/`uvx` again.
 
 ```bash
-vera setup
-vera index .
-vera search "authentication logic"
+vera setup          # download local models (or vera setup --api for remote endpoints)
+vera index .        # index the current project (creates .vera/ in project root)
+vera search "query" # search — each project gets its own index
+vera update .       # after code changes
 ```
 
-Use `vera doctor` if setup fails.
+Use `vera doctor` if anything goes wrong.
 
-### Alternative: MCP Server
-
-If your client wants a stdio MCP server instead of CLI + Skills:
+<details>
+<summary>Global install via package manager</summary>
 
 ```bash
-npx -y @vera-ai/cli mcp
-bunx @vera-ai/cli mcp
-uvx vera-ai mcp
+npm install -g @vera-ai/cli   # Node.js
+pip install vera-ai            # Python
 ```
 
-Or if `vera` is already installed:
+</details>
+
+<details>
+<summary>MCP server (JSON-RPC over stdio)</summary>
 
 ```bash
-vera mcp
+vera mcp   # or: bunx @vera-ai/cli mcp / uvx vera-ai mcp
 ```
 
-The server exposes four tools over JSON-RPC (stdio):
+Exposes `search_code`, `index_project`, `update_project`, and `get_stats` tools.
 
-- `search_code` — search the index with the same options as `vera search`
-- `index_project` — build or rebuild the index for a directory
-- `update_project` — incrementally update the index after code changes
-- `get_stats` — return index statistics (chunk count, languages, etc.)
+</details>
 
-### Alternative: Prebuilt Binaries
+<details>
+<summary>Prebuilt binaries</summary>
 
-Releases are published on [GitHub Releases](https://github.com/lemon07r/Vera/releases).
-
-| Platform | Target | Archive |
-|----------|--------|---------|
-| Linux x86_64 | `x86_64-unknown-linux-gnu` | `.tar.gz` |
-| Linux aarch64 | `aarch64-unknown-linux-gnu` | `.tar.gz` |
-| macOS x86_64 | `x86_64-apple-darwin` | `.tar.gz` |
-| macOS aarch64 | `aarch64-apple-darwin` | `.tar.gz` |
-| Windows x86_64 | `x86_64-pc-windows-msvc` | `.zip` |
+Download from [GitHub Releases](https://github.com/lemon07r/Vera/releases) for Linux (x86_64, aarch64), macOS (x86_64, aarch64), or Windows (x86_64).
 
 ```bash
 curl -sL https://github.com/lemon07r/Vera/releases/latest/download/vera-x86_64-unknown-linux-gnu.tar.gz | tar xz
-chmod +x vera-x86_64-unknown-linux-gnu/vera
 cp vera-x86_64-unknown-linux-gnu/vera ~/.local/bin/
-vera agent install
-vera setup
+vera agent install && vera setup
 ```
 
-### Alternative: Build From Source
+</details>
 
-Rust 1.85 or newer required.
+<details>
+<summary>Build from source</summary>
+
+Rust 1.85+ required.
 
 ```bash
-git clone https://github.com/lemon07r/Vera.git
-cd Vera
+git clone https://github.com/lemon07r/Vera.git && cd Vera
 cargo build --release
 cp target/release/vera ~/.local/bin/
-vera agent install
-vera setup
+vera agent install && vera setup
 ```
+
+</details>
 
 ## Model Backend
 
@@ -247,7 +221,7 @@ vera agent status --scope all  # check skill installation status
 
 If something isn't working, see [troubleshooting](docs/troubleshooting.md).
 
-The skill file at [skills/vera/SKILL.md](skills/vera/SKILL.md) teaches AI agents how to use Vera effectively.
+The skill file at [skills/vera/SKILL.md](skills/vera/SKILL.md) teaches AI agents how to use Vera effectively. If you're an AI agent reading this repo directly, start with [AGENT-USAGE.md](AGENT-USAGE.md).
 
 Sample JSON output (`--json`):
 
