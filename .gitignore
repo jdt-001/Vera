@@ -19,6 +19,7 @@ crates/tree-sitter-astro/
 # Development files
 .factory/
 .agents/
+.firecrawl/
 .dev/
 .tmp/
 skills-lock.json
