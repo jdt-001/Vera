@@ -8,6 +8,7 @@ use vera_core::config::InferenceBackend;
 use crate::helpers::{load_runtime_config, print_human_summary};
 
 /// Run the `vera index <path>` command.
+#[allow(clippy::too_many_arguments)]
 pub fn run(
     path: &str,
     json_output: bool,
@@ -16,8 +17,9 @@ pub fn run(
     no_ignore: bool,
     no_default_excludes: bool,
     verbose: bool,
+    low_vram: bool,
 ) -> anyhow::Result<()> {
-    let summary = execute(path, backend, exclude, no_ignore, no_default_excludes)?;
+    let summary = execute(path, backend, exclude, no_ignore, no_default_excludes, low_vram)?;
 
     if json_output {
         let json = serde_json::to_string_pretty(&summary)
@@ -37,6 +39,7 @@ pub fn execute(
     exclude: Vec<String>,
     no_ignore: bool,
     no_default_excludes: bool,
+    low_vram: bool,
 ) -> anyhow::Result<vera_core::indexing::IndexSummary> {
     let repo_path = Path::new(path);
 
@@ -57,6 +60,9 @@ pub fn execute(
         .map_err(|e| anyhow::anyhow!("failed to create async runtime: {e}"))?;
 
     let mut config = load_runtime_config()?;
+    if low_vram {
+        config.embedding.low_vram = true;
+    }
     config.adjust_for_backend(backend);
     config.indexing.extra_excludes = exclude;
     config.indexing.no_ignore = no_ignore;

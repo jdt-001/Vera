@@ -100,6 +100,13 @@ pub struct EmbeddingConfig {
     /// yield good retrieval quality while dramatically reducing index size.
     /// Set to 0 to store full-dimensionality vectors.
     pub max_stored_dim: usize,
+    /// GPU memory limit in MB for ONNX CUDA sessions.
+    /// 0 means no limit (ORT default: use all available VRAM).
+    #[serde(default)]
+    pub gpu_mem_limit_mb: u64,
+    /// When true, forces conservative GPU settings (batch_size=1, low mem limit).
+    #[serde(default)]
+    pub low_vram: bool,
 }
 
 impl Default for EmbeddingConfig {
@@ -111,6 +118,8 @@ impl Default for EmbeddingConfig {
             timeout_secs: 60,
             max_retries: 3,
             max_stored_dim: 1024,
+            gpu_mem_limit_mb: 0,
+            low_vram: false,
         }
     }
 }
@@ -208,7 +217,8 @@ impl VeraConfig {
     ///
     /// Saved configs may have API-mode defaults (batch 128, concurrency 8)
     /// even when the user switches to local mode. CPU inference needs small
-    /// batches; GPU can handle larger ones.
+    /// batches; GPU can handle larger ones. For GPU backends, auto-detects
+    /// available VRAM and scales batch_size accordingly.
     pub fn adjust_for_backend(&mut self, backend: InferenceBackend) {
         match backend {
             InferenceBackend::OnnxJina(OnnxExecutionProvider::Cpu) => {
@@ -216,17 +226,100 @@ impl VeraConfig {
                 self.embedding.max_concurrent_requests =
                     self.embedding.max_concurrent_requests.min(1);
             }
-            InferenceBackend::OnnxJina(_) => {
-                // GPU EPs benefit from larger batches but shouldn't exceed 32
-                // (VRAM-limited for the nano model). Single concurrent request
-                // since the GPU is already saturated by one batch.
-                self.embedding.batch_size = self.embedding.batch_size.min(32);
+            InferenceBackend::OnnxJina(ep) => {
                 self.embedding.max_concurrent_requests =
                     self.embedding.max_concurrent_requests.min(1);
+
+                if self.embedding.low_vram {
+                    self.embedding.batch_size = 1;
+                    if self.embedding.gpu_mem_limit_mb == 0 {
+                        self.embedding.gpu_mem_limit_mb = 1024;
+                    }
+                    tracing::info!("low-vram mode: batch_size=1, gpu_mem_limit={}MB", self.embedding.gpu_mem_limit_mb);
+                    return;
+                }
+
+                let vram_mb = detect_gpu_vram_mb(ep);
+                if let Some(vram) = vram_mb {
+                    tracing::info!("detected GPU VRAM: {vram}MB");
+                    // Auto-scale batch_size based on VRAM.
+                    // Prioritize speed: use large batches when VRAM allows.
+                    let auto_batch = if vram < 3072 {
+                        2
+                    } else if vram < 5120 {
+                        4
+                    } else if vram < 8192 {
+                        8
+                    } else if vram < 12288 {
+                        16
+                    } else {
+                        32
+                    };
+                    self.embedding.batch_size = self.embedding.batch_size.min(auto_batch);
+
+                    // Set a conservative memory limit only for low-VRAM GPUs
+                    // to prevent ORT from grabbing all VRAM. For >=8GB, no limit.
+                    if self.embedding.gpu_mem_limit_mb == 0 && vram < 8192 {
+                        // Use 80% of available VRAM.
+                        self.embedding.gpu_mem_limit_mb = (vram as f64 * 0.8) as u64;
+                        tracing::info!("auto-set gpu_mem_limit={}MB (80% of {vram}MB)", self.embedding.gpu_mem_limit_mb);
+                    }
+                } else {
+                    // Could not detect VRAM; use safe defaults.
+                    self.embedding.batch_size = self.embedding.batch_size.min(32);
+                }
             }
             InferenceBackend::Api => {}
         }
     }
+}
+
+/// Detect available GPU VRAM in MB for the given execution provider.
+///
+/// For CUDA/ROCm, runs `nvidia-smi` or `rocm-smi`. Returns `None` if
+/// detection fails (command not found, parse error, etc.).
+fn detect_gpu_vram_mb(ep: OnnxExecutionProvider) -> Option<u64> {
+    match ep {
+        OnnxExecutionProvider::Cuda => detect_nvidia_vram_mb(),
+        OnnxExecutionProvider::Rocm => detect_rocm_vram_mb(),
+        // DirectML, CoreML, OpenVINO: no standard CLI detection.
+        _ => None,
+    }
+}
+
+/// Query total VRAM via `nvidia-smi`.
+fn detect_nvidia_vram_mb() -> Option<u64> {
+    let output = std::process::Command::new("nvidia-smi")
+        .args(["--query-gpu=memory.free", "--format=csv,noheader,nounits"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // Take the first GPU's free memory.
+    stdout.lines().next()?.trim().parse::<u64>().ok()
+}
+
+/// Query total VRAM via `rocm-smi`.
+fn detect_rocm_vram_mb() -> Option<u64> {
+    let output = std::process::Command::new("rocm-smi")
+        .args(["--showmeminfo", "vram", "--csv"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // CSV output: header line then data. Look for free VRAM column.
+    for line in stdout.lines().skip(1) {
+        // Format varies; try to find a numeric MB value.
+        if let Some(val) = line.split(',').filter_map(|s| s.trim().parse::<u64>().ok()).next() {
+            // rocm-smi reports bytes; convert to MB.
+            return Some(val / (1024 * 1024));
+        }
+    }
+    None
 }
 
 /// Resolve the effective inference backend from a CLI flag or environment.

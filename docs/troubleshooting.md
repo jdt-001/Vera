@@ -55,6 +55,16 @@ Re-run setup to persist a working configuration:
 vera setup --api
 ```
 
+## GPU runs out of memory during indexing
+
+Vera auto-detects VRAM and adjusts batch size, but very low-VRAM GPUs (4 GB or less) may still run out of memory. Use the `--low-vram` flag:
+
+```bash
+vera index . --low-vram
+```
+
+This forces batch size 1 and caps the ONNX Runtime memory arena to 1 GB. You can also manually tune batch size with `vera config set embedding.batch_size 1`.
+
 ## Too many irrelevant results
 
 Try narrowing your search:

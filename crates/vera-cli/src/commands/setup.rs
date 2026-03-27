@@ -106,7 +106,7 @@ pub(crate) fn configure_backend(
     }
 
     if let Some(path) = index_path.as_deref() {
-        commands::index::execute(path, effective_backend, Vec::new(), false, false)?;
+        commands::index::execute(path, effective_backend, Vec::new(), false, false, false)?;
     }
 
     let report = SetupReport {

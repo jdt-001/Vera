@@ -258,6 +258,9 @@ enum Commands {
         /// Show detailed information (e.g. paths of skipped files).
         #[arg(long, short = 'v')]
         verbose: bool,
+        /// Reduce GPU memory usage (batch_size=1, conservative VRAM limit).
+        #[arg(long)]
+        low_vram: bool,
     },
 
     /// Search the indexed codebase.
@@ -475,6 +478,7 @@ fn main() {
             no_ignore,
             no_default_excludes,
             verbose,
+            low_vram,
         } => {
             tracing::info!(path = %path, "indexing");
             commands::index::run(
@@ -485,6 +489,7 @@ fn main() {
                 no_ignore,
                 no_default_excludes,
                 verbose,
+                low_vram,
             )
         }
         Commands::Search {

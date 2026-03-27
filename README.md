@@ -173,6 +173,8 @@ With both models cached, the full pipeline (BM25 + vector search + rerank) runs 
 
 Vera downloads the matching ONNX Runtime build automatically. For OpenVINO and ROCm (no pre-built binaries on GitHub), Vera installs via pip into a managed venv at `~/.vera/venv/`, falling back to direct PyPI wheel download if pip is unavailable. The same flag works on `vera index` and `vera search` to override the configured backend per-command.
 
+Vera auto-detects available VRAM and scales batch size accordingly. On GPUs with less than 8 GB VRAM, it also caps the ONNX Runtime memory arena to 80% of free VRAM. For very constrained GPUs (4 GB or less), pass `--low-vram` to `vera index` to force batch size 1 and a 1 GB memory limit.
+
 ### Inference Speed
 
 Local mode runs neural networks on your machine. GPU is recommended; CPU works but is slow for initial indexing. After the first index, `vera update .` only re-embeds changed files, so updates are fast even on CPU.

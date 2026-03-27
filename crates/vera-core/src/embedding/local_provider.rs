@@ -21,6 +21,10 @@ pub struct LocalEmbeddingProvider {
 
 impl LocalEmbeddingProvider {
     pub async fn new_with_ep(ep: OnnxExecutionProvider) -> Result<Self, EmbeddingError> {
+        Self::new_with_ep_and_mem_limit(ep, 0).await
+    }
+
+    pub async fn new_with_ep_and_mem_limit(ep: OnnxExecutionProvider, gpu_mem_limit_mb: u64) -> Result<Self, EmbeddingError> {
         let ort_path = crate::local_models::ensure_ort_library_for_ep(ep)
             .await
             .map_err(|e| EmbeddingError::ApiError {
@@ -72,7 +76,7 @@ impl LocalEmbeddingProvider {
                 message: e.to_string(),
             })?;
 
-        let session = task::spawn_blocking(move || build_session(ep, onnx_path))
+        let session = task::spawn_blocking(move || build_session(ep, onnx_path, gpu_mem_limit_mb))
             .await
             .map_err(|e| EmbeddingError::ApiError {
                 status: 500,
@@ -93,7 +97,7 @@ impl LocalEmbeddingProvider {
         let builder = ort::session::builder::SessionBuilder::new()?
             .with_optimization_level(GraphOptimizationLevel::Level3)?
             .with_intra_threads(1)?;
-        let _ = register_execution_provider(builder, ep)?;
+        let _ = register_execution_provider(builder, ep, 0)?;
         Ok(())
     }
 
@@ -101,7 +105,7 @@ impl LocalEmbeddingProvider {
         let ort_path = crate::local_models::ort_library_path_for_ep(ep)?;
         crate::local_models::ensure_ort_runtime(Some(&ort_path))?;
         let (onnx_path, _, _) = default_asset_paths()?;
-        let _ = build_session(ep, onnx_path)?;
+        let _ = build_session(ep, onnx_path, 0)?;
         Ok(())
     }
 
@@ -109,7 +113,7 @@ impl LocalEmbeddingProvider {
         let ort_path = crate::local_models::ort_library_path_for_ep(ep)?;
         crate::local_models::ensure_ort_runtime(Some(&ort_path))?;
         let (onnx_path, _, tokenizer_path) = default_asset_paths()?;
-        let mut session = build_session(ep, onnx_path)?;
+        let mut session = build_session(ep, onnx_path, 0)?;
         let tokenizer = load_tokenizer(tokenizer_path)?;
         run_probe_inference(&mut session, &tokenizer)
     }
@@ -240,7 +244,7 @@ fn load_tokenizer(tokenizer_path: std::path::PathBuf) -> Result<Tokenizer> {
     Ok(tokenizer)
 }
 
-fn build_session(ep: OnnxExecutionProvider, onnx_path: std::path::PathBuf) -> Result<Session> {
+fn build_session(ep: OnnxExecutionProvider, onnx_path: std::path::PathBuf, gpu_mem_limit_mb: u64) -> Result<Session> {
     let available = std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(1);
@@ -255,7 +259,7 @@ fn build_session(ep: OnnxExecutionProvider, onnx_path: std::path::PathBuf) -> Re
     let builder = ort::session::builder::SessionBuilder::new()?
         .with_optimization_level(GraphOptimizationLevel::Level3)?
         .with_intra_threads(threads)?;
-    let builder = register_execution_provider(builder, ep)?;
+    let builder = register_execution_provider(builder, ep, gpu_mem_limit_mb)?;
     builder
         .commit_from_file(&onnx_path)
         .with_context(|| format!("failed to load embedding model {}", onnx_path.display()))
@@ -329,9 +333,12 @@ impl EmbeddingProvider for LocalEmbeddingProvider {
 }
 
 /// Register the appropriate ONNX execution provider on a session builder.
+///
+/// `gpu_mem_limit_mb`: if >0, caps GPU memory arena for CUDA/ROCm.
 fn register_execution_provider(
     builder: ort::session::builder::SessionBuilder,
     ep: OnnxExecutionProvider,
+    gpu_mem_limit_mb: u64,
 ) -> ort::Result<ort::session::builder::SessionBuilder> {
     match ep {
         OnnxExecutionProvider::Cpu => {
@@ -340,9 +347,13 @@ fn register_execution_provider(
         }
         OnnxExecutionProvider::Cuda => {
             tracing::info!("registering CUDA execution provider");
-            let result = builder.with_execution_providers([
-                ort::execution_providers::CUDAExecutionProvider::default().build(),
-            ]);
+            let mut cuda_ep = ort::execution_providers::CUDAExecutionProvider::default();
+            if gpu_mem_limit_mb > 0 {
+                let limit_bytes = gpu_mem_limit_mb as usize * 1024 * 1024;
+                tracing::info!("setting CUDA memory limit: {gpu_mem_limit_mb}MB");
+                cuda_ep = cuda_ep.with_memory_limit(limit_bytes);
+            }
+            let result = builder.with_execution_providers([cuda_ep.build()]);
             if result.is_ok() {
                 tracing::info!(
                     "CUDA execution provider registered (will fall back to CPU if unavailable)"
