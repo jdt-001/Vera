@@ -29,6 +29,13 @@ pub struct LocalModelAssetStatus {
     pub exists: bool,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct SharedLibraryDependencyStatus {
+    pub inspected_files: Vec<PathBuf>,
+    pub missing_details: Vec<String>,
+    pub missing_libraries: Vec<String>,
+}
+
 /// Ensure the ONNX Runtime shared library is loaded and initialized.
 ///
 /// Accepts an optional pre-resolved library path (from `ensure_ort_library`).
@@ -335,6 +342,151 @@ pub fn ort_library_path_for_ep(ep: OnnxExecutionProvider) -> Result<PathBuf> {
     };
 
     Ok(lib_dir.join(platform_ort_lib_name()))
+}
+
+pub fn ensure_provider_dependencies(
+    ep: OnnxExecutionProvider,
+    runtime_path: &std::path::Path,
+) -> Result<()> {
+    let Some(status) = inspect_shared_library_deps(runtime_path)? else {
+        return Ok(());
+    };
+
+    if status.missing_libraries.is_empty() {
+        return Ok(());
+    }
+
+    let backend_name = match ep {
+        OnnxExecutionProvider::Cpu => "CPU",
+        OnnxExecutionProvider::Cuda => "CUDA",
+        OnnxExecutionProvider::Rocm => "ROCm",
+        OnnxExecutionProvider::DirectMl => "DirectML",
+        OnnxExecutionProvider::CoreMl => "CoreML",
+        OnnxExecutionProvider::OpenVino => "OpenVINO",
+    };
+
+    let mut message =
+        format!("{backend_name} backend selected, but required libraries are missing:\n");
+    for library in &status.missing_libraries {
+        message.push_str(&format!("  {library}\n"));
+    }
+    if let Some(hint) = dependency_hint(ep) {
+        message.push_str(&hint);
+        message.push('\n');
+    }
+    message.push_str("Run `vera doctor --probe` for details.");
+    anyhow::bail!("{}", message.trim_end());
+}
+
+pub fn inspect_shared_library_deps(
+    runtime_path: &std::path::Path,
+) -> Result<Option<SharedLibraryDependencyStatus>> {
+    inspect_shared_library_deps_impl(runtime_path)
+}
+
+#[cfg(target_os = "linux")]
+fn inspect_shared_library_deps_impl(
+    runtime_path: &std::path::Path,
+) -> Result<Option<SharedLibraryDependencyStatus>> {
+    if !runtime_path.exists() {
+        return Ok(None);
+    }
+
+    if std::process::Command::new("ldd")
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_err()
+    {
+        return Ok(None);
+    }
+
+    let mut inspected_files = vec![runtime_path.to_path_buf()];
+    if let Some(dir) = runtime_path.parent() {
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+                    continue;
+                };
+                if name.starts_with("libonnxruntime")
+                    && name.contains(".so")
+                    && path != runtime_path
+                {
+                    inspected_files.push(path);
+                }
+            }
+        }
+    }
+    inspected_files.sort();
+    inspected_files.dedup();
+
+    let mut missing_details = Vec::new();
+    let mut missing_libraries = Vec::new();
+
+    for inspected in &inspected_files {
+        let output = std::process::Command::new("ldd")
+            .arg(inspected)
+            .output()
+            .with_context(|| format!("failed to run `ldd` on {}", inspected.display()))?;
+        let text = format!(
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let file_name = inspected
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("unknown");
+        for line in text.lines().filter(|line| line.contains("not found")) {
+            let library = line.split("=>").next().unwrap_or(line).trim().to_string();
+            missing_details.push(format!("{file_name}: {library}"));
+            missing_libraries.push(library);
+        }
+    }
+
+    missing_details.sort();
+    missing_details.dedup();
+    missing_libraries.sort();
+    missing_libraries.dedup();
+
+    Ok(Some(SharedLibraryDependencyStatus {
+        inspected_files,
+        missing_details,
+        missing_libraries,
+    }))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn inspect_shared_library_deps_impl(
+    _: &std::path::Path,
+) -> Result<Option<SharedLibraryDependencyStatus>> {
+    Ok(None)
+}
+
+fn dependency_hint(ep: OnnxExecutionProvider) -> Option<String> {
+    match ep {
+        OnnxExecutionProvider::Cpu => None,
+        OnnxExecutionProvider::Cuda => {
+            let cuda_major = detect_cuda_major_version().unwrap_or(12);
+            Some(format!(
+                "Install the CUDA {cuda_major} toolkit and cuDNN 9, then ensure they're on the linker path."
+            ))
+        }
+        OnnxExecutionProvider::Rocm => {
+            Some("Install the ROCm userspace libraries, then ensure they're on the linker path.".to_string())
+        }
+        OnnxExecutionProvider::DirectMl => {
+            Some("Install the DirectML runtime and required GPU drivers.".to_string())
+        }
+        OnnxExecutionProvider::CoreMl => {
+            Some("Verify you are running on Apple Silicon with a supported macOS version.".to_string())
+        }
+        OnnxExecutionProvider::OpenVino => {
+            Some("Install the Intel OpenVINO runtime or compute libraries, then ensure they're on the linker path.".to_string())
+        }
+    }
 }
 
 fn platform_ort_lib_name() -> &'static str {

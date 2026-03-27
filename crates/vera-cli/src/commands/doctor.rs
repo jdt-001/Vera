@@ -391,7 +391,6 @@ fn skipped_check(name: &'static str, detail: impl Into<String>) -> DoctorCheck {
     }
 }
 
-#[cfg(target_os = "linux")]
 fn dependency_probe_check(runtime_path: &std::path::Path) -> DoctorCheck {
     if !runtime_path.exists() {
         return skipped_check(
@@ -400,83 +399,35 @@ fn dependency_probe_check(runtime_path: &std::path::Path) -> DoctorCheck {
         );
     }
 
-    if std::process::Command::new("ldd")
-        .arg("--version")
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .is_err()
-    {
-        return skipped_check("probe-dependencies", "`ldd` is not available");
-    }
-
-    let mut targets = vec![runtime_path.to_path_buf()];
-    if let Some(dir) = runtime_path.parent() {
-        if let Ok(entries) = std::fs::read_dir(dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
-                    continue;
-                };
-                if name.starts_with("libonnxruntime")
-                    && name.contains(".so")
-                    && path != runtime_path
-                {
-                    targets.push(path);
+    match vera_core::local_models::inspect_shared_library_deps(runtime_path) {
+        Ok(Some(status)) => {
+            if status.missing_details.is_empty() {
+                DoctorCheck {
+                    name: "probe-dependencies",
+                    status: CheckStatus::Ok,
+                    detail: "found no unresolved ONNX Runtime dependencies".to_string(),
+                }
+            } else {
+                DoctorCheck {
+                    name: "probe-dependencies",
+                    status: CheckStatus::Fail,
+                    detail: format!(
+                        "missing shared libraries: {}",
+                        status.missing_details.join("; ")
+                    ),
                 }
             }
         }
-    }
-    targets.sort();
-    targets.dedup();
-
-    let mut missing = Vec::new();
-    for target in targets {
-        let output = match std::process::Command::new("ldd").arg(&target).output() {
-            Ok(output) => output,
-            Err(err) => {
-                return DoctorCheck {
-                    name: "probe-dependencies",
-                    status: CheckStatus::Warn,
-                    detail: format!("failed to run `ldd` on {}: {}", target.display(), err),
-                };
-            }
-        };
-        let text = format!(
-            "{}\n{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-        for line in text.lines().filter(|line| line.contains("not found")) {
-            let file_name = target
-                .file_name()
-                .and_then(|name| name.to_str())
-                .unwrap_or("unknown");
-            missing.push(format!("{file_name}: {}", line.trim()));
-        }
-    }
-
-    if missing.is_empty() {
-        DoctorCheck {
+        Ok(None) => skipped_check(
+            "probe-dependencies",
+            "dependency inspection is currently available only on Linux with `ldd`",
+        ),
+        Err(err) => DoctorCheck {
             name: "probe-dependencies",
-            status: CheckStatus::Ok,
-            detail: "ldd found no unresolved ONNX Runtime dependencies".to_string(),
-        }
-    } else {
-        DoctorCheck {
-            name: "probe-dependencies",
-            status: CheckStatus::Fail,
-            detail: format!("missing shared libraries: {}", missing.join("; ")),
-        }
+            status: CheckStatus::Warn,
+            detail: one_line_error(&err),
+        },
     }
-}
-
-#[cfg(not(target_os = "linux"))]
-fn dependency_probe_check(_: &std::path::Path) -> DoctorCheck {
-    skipped_check(
-        "probe-dependencies",
-        "dependency inspection is currently implemented only on Linux",
-    )
 }
 
 fn version_check(status: &update_check::BinaryVersionStatus) -> DoctorCheck {

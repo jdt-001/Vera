@@ -27,6 +27,11 @@ vera search "error handling" --onnx-jina-cpu
 
 # GPU acceleration (NVIDIA/AMD/DirectML/CoreML/OpenVINO)
 vera index . --onnx-jina-cuda
+
+# Diagnose or repair local setup issues
+vera doctor
+vera doctor --probe
+vera repair
 ```
 
 ## What you get

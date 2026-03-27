@@ -74,7 +74,7 @@ vera update .       # after code changes
 
 `vera setup` with no flags shows a backend picker and auto-detects your GPU. You can also skip the menu: `vera setup --onnx-jina-cuda` (NVIDIA), `--onnx-jina-coreml` (Apple Silicon), `--api` (remote endpoints), etc. Run `vera setup --help` for all options.
 
-Use `vera doctor` if anything goes wrong. It reports the saved and active backend, installed Vera version, and checks GitHub for newer releases. Add `--probe` for a deeper read-only ONNX session check that does not download or repair missing assets.
+Use `vera doctor` if anything goes wrong. It reports the saved and active backend, installed Vera version, and checks GitHub for newer releases. Add `--probe` for a deeper read-only ONNX session check that does not download or repair missing assets. Use `vera repair` to re-fetch missing local assets or re-save API config from the current environment.
 
 <details>
 <summary>MCP server (JSON-RPC over stdio)</summary>
@@ -242,6 +242,8 @@ pub fn authenticate(credentials: &Credentials) -> Result<Token> { ... }
 ```bash
 vera doctor                    # diagnose setup issues
 vera doctor --probe            # deeper read-only ONNX probe
+vera doctor --probe --json     # machine-readable deep diagnostics
+vera repair                    # re-fetch missing assets for current backend
 vera stats                     # index statistics
 vera config                    # show current configuration
 vera agent install             # install skill files for AI agents

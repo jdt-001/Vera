@@ -31,7 +31,8 @@ use clap::{Parser, Subcommand};
                   vera setup            # Download built-in local models\n  \
                   vera index .          # Index current directory\n  \
                   vera search \"auth\"    # Search for authentication code\n  \
-                  vera doctor           # Check local setup and index health",
+                  vera doctor           # Check local setup and index health\n  \
+                  vera repair           # Re-fetch missing backend assets",
     version
 )]
 struct Cli {
@@ -193,6 +194,47 @@ enum Commands {
         /// Run a deeper read-only probe of local ONNX session init.
         #[arg(long, visible_alias = "deep")]
         probe: bool,
+    },
+
+    /// Repair the configured Vera backend.
+    ///
+    /// Re-fetches missing local runtime/model assets for the selected local
+    /// backend, or re-persists API configuration from the current environment.
+    #[command(long_about = "Repair the configured Vera backend.\n\n\
+                      For local ONNX backends, this re-fetches missing runtime and \
+                      model assets for the selected backend. For API mode, it re-saves \
+                      the current API environment variables into Vera's config.\n\n\
+                      This is a write operation. Use `vera doctor --probe` for a read-only \
+                      diagnostic check.\n\n\
+                      Examples:\n  \
+                      vera repair\n  \
+                      vera repair --onnx-jina-cuda\n  \
+                      vera repair --api")]
+    Repair {
+        /// Use local Jina ONNX models on CPU.
+        #[arg(long = "onnx-jina-cpu", group = "backend")]
+        onnx_jina_cpu: bool,
+        /// Use local Jina ONNX models with CUDA (NVIDIA GPU).
+        #[arg(long = "onnx-jina-cuda", group = "backend")]
+        onnx_jina_cuda: bool,
+        /// Use local Jina ONNX models with ROCm (AMD GPU, Linux only).
+        #[arg(long = "onnx-jina-rocm", group = "backend")]
+        onnx_jina_rocm: bool,
+        /// Use local Jina ONNX models with DirectML (Windows GPU).
+        #[arg(long = "onnx-jina-directml", group = "backend")]
+        onnx_jina_directml: bool,
+        /// Use local Jina ONNX models with CoreML (Apple Silicon).
+        #[arg(long = "onnx-jina-coreml", group = "backend")]
+        onnx_jina_coreml: bool,
+        /// Use local Jina ONNX models with OpenVINO (Intel GPU/iGPU, Linux only).
+        #[arg(long = "onnx-jina-openvino", group = "backend")]
+        onnx_jina_openvino: bool,
+        /// Alias for --onnx-jina-cpu (backwards compatibility).
+        #[arg(long, group = "backend", hide = true)]
+        local: bool,
+        /// Repair API-backed mode using current env vars.
+        #[arg(long, group = "backend")]
+        api: bool,
     },
 
     /// Index a codebase for search.
@@ -517,6 +559,41 @@ fn main() {
             tracing::info!("doctor command");
             commands::doctor::run(cli.json, probe)
         }
+        Commands::Repair {
+            onnx_jina_cpu,
+            onnx_jina_cuda,
+            onnx_jina_rocm,
+            onnx_jina_directml,
+            onnx_jina_coreml,
+            onnx_jina_openvino,
+            local,
+            api,
+        } => {
+            tracing::info!("repair command");
+            let backend = if api {
+                None
+            } else if onnx_jina_cpu
+                || onnx_jina_cuda
+                || onnx_jina_rocm
+                || onnx_jina_directml
+                || onnx_jina_coreml
+                || onnx_jina_openvino
+                || local
+            {
+                Some(helpers::resolve_backend_flags(
+                    onnx_jina_cpu,
+                    onnx_jina_cuda,
+                    onnx_jina_rocm,
+                    onnx_jina_directml,
+                    onnx_jina_coreml,
+                    onnx_jina_openvino,
+                    local,
+                ))
+            } else {
+                None
+            };
+            commands::repair::run(backend, api, cli.json)
+        }
         Commands::Index {
             path,
             onnx_jina_cpu,
@@ -732,6 +809,15 @@ mod tests {
     fn cli_parses_doctor_probe_command() {
         let cli = Cli::parse_from(["vera", "doctor", "--probe"]);
         assert!(matches!(cli.command, Commands::Doctor { probe: true }));
+    }
+
+    #[test]
+    fn cli_parses_repair_command() {
+        let cli = Cli::parse_from(["vera", "repair", "--onnx-jina-cuda"]);
+        match cli.command {
+            Commands::Repair { onnx_jina_cuda, .. } => assert!(onnx_jina_cuda),
+            _ => panic!("expected Repair command"),
+        }
     }
 
     #[test]

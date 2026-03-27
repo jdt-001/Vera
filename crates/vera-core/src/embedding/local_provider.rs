@@ -33,6 +33,12 @@ impl LocalEmbeddingProvider {
                 message: e.to_string(),
             }
         })?;
+        crate::local_models::ensure_provider_dependencies(ep, &ort_path).map_err(|e| {
+            EmbeddingError::ApiError {
+                status: 500,
+                message: e.to_string(),
+            }
+        })?;
 
         let onnx_path = ensure_model_file(EMBEDDING_REPO, ONNX_FILE)
             .await

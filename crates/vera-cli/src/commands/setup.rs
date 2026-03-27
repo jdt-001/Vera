@@ -10,7 +10,7 @@ use crate::commands;
 use crate::state::{self, ApiSetupInput};
 
 #[derive(Debug, Serialize)]
-struct SetupReport {
+pub(crate) struct SetupReport {
     mode: String,
     config_path: String,
     credentials_path: String,
@@ -45,8 +45,6 @@ pub fn run(
         prompt_backend()?
     };
 
-    let use_local = effective_backend.is_local();
-
     if !yes && !confirm(&effective_backend, index_path.as_deref())? {
         if !json_output {
             println!("Cancelled.");
@@ -54,6 +52,21 @@ pub fn run(
         return Ok(());
     }
 
+    configure_backend(
+        effective_backend,
+        index_path,
+        json_output,
+        "Vera setup complete.",
+    )
+}
+
+pub(crate) fn configure_backend(
+    effective_backend: InferenceBackend,
+    index_path: Option<String>,
+    json_output: bool,
+    success_header: &str,
+) -> anyhow::Result<()> {
+    let use_local = effective_backend.is_local();
     let mut models_prefetched = 0usize;
     let onnx_runtime_ready;
 
@@ -102,7 +115,7 @@ pub fn run(
     if json_output {
         println!("{}", serde_json::to_string_pretty(&report)?);
     } else {
-        println!("Vera setup complete.");
+        println!("{success_header}");
         println!();
         println!("  Mode:                 {}", report.mode);
         println!("  Config:               {}", report.config_path);
