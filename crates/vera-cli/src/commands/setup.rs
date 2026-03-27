@@ -15,7 +15,8 @@ struct SetupReport {
     config_path: String,
     credentials_path: String,
     models_prefetched: usize,
-    onnx_runtime_ready: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    onnx_runtime_ready: Option<bool>,
     indexed_path: Option<String>,
 }
 
@@ -57,18 +58,18 @@ pub fn run(
     let onnx_runtime_ready;
 
     if let InferenceBackend::OnnxJina(ep) = effective_backend {
-        state::save_local_mode(true)?;
-        state::apply_saved_env_force()?;
-
         let rt = tokio::runtime::Runtime::new()
             .map_err(|e| anyhow::anyhow!("failed to create async runtime: {e}"))?;
         let prefetched =
             rt.block_on(vera_core::local_models::prefetch_default_local_models_for_ep(ep))?;
         models_prefetched = prefetched.len();
         // Use the downloaded library path (first prefetched file) for the readiness check.
-        onnx_runtime_ready =
+        onnx_runtime_ready = Some(
             vera_core::local_models::ensure_ort_runtime(prefetched.first().map(|p| p.as_path()))
-                .is_ok();
+                .is_ok(),
+        );
+        state::save_backend(effective_backend)?;
+        state::apply_saved_env_force()?;
     } else {
         let embedding = read_required_api_env(
             "EMBEDDING_MODEL_BASE_URL",
@@ -81,9 +82,8 @@ pub fn run(
             "RERANKER_MODEL_API_KEY",
         )?;
         state::save_api_setup(&embedding, reranker.as_ref())?;
-        state::save_local_mode(false)?;
         state::apply_saved_env_force()?;
-        onnx_runtime_ready = vera_core::local_models::ensure_ort_runtime(None).is_ok();
+        onnx_runtime_ready = None;
     }
 
     if let Some(path) = index_path.as_deref() {
@@ -109,15 +109,15 @@ pub fn run(
         println!("  Credentials:          {}", report.credentials_path);
         if use_local {
             println!("  Prefetched model files: {}", report.models_prefetched);
+            println!(
+                "  ONNX Runtime ready:   {}",
+                if report.onnx_runtime_ready == Some(true) {
+                    "yes"
+                } else {
+                    "no"
+                }
+            );
         }
-        println!(
-            "  ONNX Runtime ready:   {}",
-            if report.onnx_runtime_ready {
-                "yes"
-            } else {
-                "no"
-            }
-        );
         if let Some(path) = report.indexed_path.as_deref() {
             println!("  Indexed path:         {path}");
         }

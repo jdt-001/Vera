@@ -197,6 +197,12 @@ pub fn is_local_mode() -> bool {
         .unwrap_or(false)
 }
 
+fn backend_from_env() -> Option<InferenceBackend> {
+    std::env::var("VERA_BACKEND")
+        .ok()
+        .and_then(|value| InferenceBackend::from_str(&value).ok())
+}
+
 impl VeraConfig {
     /// Adjust embedding parameters to match the actual backend.
     ///
@@ -228,6 +234,9 @@ pub fn resolve_backend(backend: Option<InferenceBackend>) -> InferenceBackend {
     if let Some(b) = backend {
         return b;
     }
+    if let Some(b) = backend_from_env() {
+        return b;
+    }
     // Legacy: VERA_LOCAL=1 maps to onnx-jina-cpu
     if is_local_mode() {
         return InferenceBackend::OnnxJina(OnnxExecutionProvider::Cpu);
@@ -238,6 +247,24 @@ pub fn resolve_backend(backend: Option<InferenceBackend>) -> InferenceBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex, OnceLock};
+
+    fn env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    fn set_env(key: &str, value: &str) {
+        unsafe {
+            std::env::set_var(key, value);
+        }
+    }
+
+    fn remove_env(key: &str) {
+        unsafe {
+            std::env::remove_var(key);
+        }
+    }
 
     #[test]
     fn default_config_is_valid() {
@@ -284,5 +311,34 @@ mod tests {
                 .contains(&"node_modules".to_string())
         );
         assert!(config.default_excludes.contains(&"target".to_string()));
+    }
+
+    #[test]
+    fn resolve_backend_prefers_saved_backend_env() {
+        let _guard = env_lock().lock().unwrap();
+        set_env("VERA_BACKEND", "onnx-jina-cuda");
+        set_env("VERA_LOCAL", "1");
+
+        assert_eq!(
+            resolve_backend(None),
+            InferenceBackend::OnnxJina(OnnxExecutionProvider::Cuda)
+        );
+
+        remove_env("VERA_BACKEND");
+        remove_env("VERA_LOCAL");
+    }
+
+    #[test]
+    fn resolve_backend_falls_back_to_legacy_local_env() {
+        let _guard = env_lock().lock().unwrap();
+        remove_env("VERA_BACKEND");
+        set_env("VERA_LOCAL", "1");
+
+        assert_eq!(
+            resolve_backend(None),
+            InferenceBackend::OnnxJina(OnnxExecutionProvider::Cpu)
+        );
+
+        remove_env("VERA_LOCAL");
     }
 }

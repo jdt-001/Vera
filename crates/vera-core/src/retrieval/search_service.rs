@@ -404,7 +404,6 @@ fn chunk_to_result(chunk: crate::types::Chunk) -> SearchResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::bm25::{Bm25Document, Bm25Index};
     use crate::storage::metadata::MetadataStore;
     use crate::types::{Chunk, Language};
     use tempfile::tempdir;

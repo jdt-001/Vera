@@ -24,14 +24,15 @@ Run the diagnostic command first:
 
 ```bash
 vera doctor
+vera doctor --probe
 ```
 
 Common causes:
 
 - Models haven't been downloaded yet. run `vera setup` (or `vera setup --onnx-jina-cpu`)
 - ONNX Runtime auto-download failed. check network, or set `ORT_DYLIB_PATH` to a manually installed library
-- GPU backend not working. make sure the required drivers are installed (CUDA 12+ for `--onnx-jina-cuda`, ROCm for `--onnx-jina-rocm`, DirectX 12 for `--onnx-jina-directml`). CoreML (`--onnx-jina-coreml`) requires macOS on Apple Silicon. OpenVINO (`--onnx-jina-openvino`) requires Intel compute runtime on Linux x86_64. If GPU init fails, Vera falls back to CPU automatically.
-- `vera doctor` will flag missing models or runtime
+- GPU backend not working. make sure the required drivers are installed (CUDA 12+ for `--onnx-jina-cuda`, ROCm for `--onnx-jina-rocm`, DirectX 12 for `--onnx-jina-directml`). CoreML (`--onnx-jina-coreml`) requires macOS on Apple Silicon. OpenVINO (`--onnx-jina-openvino`) requires Intel compute runtime on Linux x86_64. If GPU init still fails, rerun with `--onnx-jina-cpu` or fix the provider-specific dependencies.
+- `vera doctor` will flag missing models or runtime, show the saved and active backend, print the installed Vera version, and check for newer releases. `vera doctor --probe` adds a deeper read-only session probe and does not download or repair missing assets.
 
 ## API mode isn't working
 

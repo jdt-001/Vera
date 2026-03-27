@@ -18,6 +18,37 @@ const CHECK_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 const GITHUB_API_TIMEOUT: Duration = Duration::from_secs(5);
 const REPO: &str = "lemon07r/Vera";
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VersionCheckSource {
+    Live,
+    Cache,
+    Unavailable,
+}
+
+#[derive(Debug, Clone)]
+pub struct BinaryVersionStatus {
+    pub current_version: &'static str,
+    pub latest_version: Option<String>,
+    pub install_method: Option<String>,
+    pub source: VersionCheckSource,
+}
+
+impl BinaryVersionStatus {
+    pub fn update_available(&self) -> bool {
+        self.latest_version
+            .as_deref()
+            .is_some_and(|latest| is_newer(latest, self.current_version))
+    }
+
+    pub fn update_command(&self) -> String {
+        suggested_update_command(self.install_method.as_deref())
+    }
+}
+
+pub fn current_version() -> &'static str {
+    CURRENT_VERSION
+}
+
 /// Run all update checks and print hints to stderr. Never fails — errors are
 /// silently swallowed so the user's actual command output is never disrupted.
 pub fn print_nudges() {
@@ -92,59 +123,95 @@ fn cache_path() -> Option<PathBuf> {
 }
 
 fn check_binary_staleness() {
-    let cache_file = match cache_path() {
-        Some(p) => p,
-        None => return,
-    };
-
-    // Try loading cache first.
-    let now = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-
-    if let Some(cached) = load_cache(&cache_file) {
-        if now.saturating_sub(cached.checked_at_secs) < CHECK_INTERVAL.as_secs() {
-            if is_newer(&cached.latest_version, CURRENT_VERSION) {
-                print_binary_nudge(&cached.latest_version, cached.install_method.as_deref());
-            }
-            return;
+    let status = binary_version_status(false);
+    if let Some(latest) = status.latest_version.as_deref() {
+        if status.update_available() {
+            print_binary_nudge(latest, status.install_method.as_deref());
         }
-    }
-
-    // Cache is stale or missing — fetch in background-ish (blocking but with
-    // a short timeout so it doesn't delay the user noticeably).
-    let latest = match fetch_latest_version() {
-        Some(v) => v,
-        None => return,
-    };
-
-    let method = detect_install_method();
-
-    let cache = UpdateCache {
-        latest_version: latest.clone(),
-        checked_at_secs: now,
-        install_method: method.clone(),
-    };
-    let _ = save_cache(&cache_file, &cache);
-
-    if is_newer(&latest, CURRENT_VERSION) {
-        print_binary_nudge(&latest, method.as_deref());
     }
 }
 
 fn print_binary_nudge(latest: &str, install_method: Option<&str>) {
-    let update_cmd = match install_method {
+    let update_cmd = suggested_update_command(install_method);
+    eprintln!(
+        "hint: vera v{} is available (current: v{}). Update: `{}`",
+        latest, CURRENT_VERSION, update_cmd,
+    );
+}
+
+pub fn binary_version_status(force_refresh: bool) -> BinaryVersionStatus {
+    let install_method = detect_install_method();
+    let cache_file = match cache_path() {
+        Some(path) => path,
+        None => {
+            return BinaryVersionStatus {
+                current_version: CURRENT_VERSION,
+                latest_version: None,
+                install_method,
+                source: VersionCheckSource::Unavailable,
+            };
+        }
+    };
+
+    let now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let cached = load_cache(&cache_file);
+
+    if !force_refresh {
+        if let Some(cached) = cached.as_ref() {
+            if now.saturating_sub(cached.checked_at_secs) < CHECK_INTERVAL.as_secs() {
+                return BinaryVersionStatus {
+                    current_version: CURRENT_VERSION,
+                    latest_version: Some(cached.latest_version.clone()),
+                    install_method: cached.install_method.clone().or(install_method),
+                    source: VersionCheckSource::Cache,
+                };
+            }
+        }
+    }
+
+    if let Some(latest) = fetch_latest_version() {
+        let cache = UpdateCache {
+            latest_version: latest.clone(),
+            checked_at_secs: now,
+            install_method: install_method.clone(),
+        };
+        let _ = save_cache(&cache_file, &cache);
+        return BinaryVersionStatus {
+            current_version: CURRENT_VERSION,
+            latest_version: Some(latest),
+            install_method,
+            source: VersionCheckSource::Live,
+        };
+    }
+
+    if let Some(cached) = cached {
+        return BinaryVersionStatus {
+            current_version: CURRENT_VERSION,
+            latest_version: Some(cached.latest_version),
+            install_method: cached.install_method.or(install_method),
+            source: VersionCheckSource::Cache,
+        };
+    }
+
+    BinaryVersionStatus {
+        current_version: CURRENT_VERSION,
+        latest_version: None,
+        install_method,
+        source: VersionCheckSource::Unavailable,
+    }
+}
+
+fn suggested_update_command(install_method: Option<&str>) -> String {
+    match install_method {
         Some("npm") => "npm update -g @vera-ai/cli && vera agent install".to_string(),
         Some("bun") => "bunx @vera-ai/cli install".to_string(),
         Some("pip") => "pip install --upgrade vera-ai && vera agent install".to_string(),
         Some("uv") => "uvx vera-ai install".to_string(),
         _ => "bunx @vera-ai/cli install".to_string(),
-    };
-    eprintln!(
-        "hint: vera v{} is available (current: v{}). Update: `{}`",
-        latest, CURRENT_VERSION, update_cmd,
-    );
+    }
 }
 
 /// Compare two semver-ish strings. Returns true if `latest` > `current`.

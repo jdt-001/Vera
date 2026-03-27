@@ -3,11 +3,13 @@
 use serde::Serialize;
 
 use crate::state;
+use crate::update_check::{self, VersionCheckSource};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 enum CheckStatus {
     Ok,
+    Skip,
     Warn,
     Fail,
 }
@@ -21,12 +23,17 @@ struct DoctorCheck {
 
 #[derive(Debug, Clone, Serialize)]
 struct DoctorReport {
+    version: String,
     overall_ok: bool,
     checks: Vec<DoctorCheck>,
 }
 
-pub fn run(json_output: bool) -> anyhow::Result<()> {
+pub fn run(json_output: bool, probe: bool) -> anyhow::Result<()> {
     let mut checks = Vec::new();
+    let version = update_check::current_version().to_string();
+
+    let version_status = update_check::binary_version_status(true);
+    checks.push(version_check(&version_status));
 
     let config_path = state::config_path()?;
     checks.push(DoctorCheck {
@@ -39,7 +46,11 @@ pub fn run(json_output: bool) -> anyhow::Result<()> {
         detail: config_path.display().to_string(),
     });
 
-    let local_mode = vera_core::config::is_local_mode();
+    let saved_config = state::load_saved_config()?;
+    checks.push(saved_backend_check(&saved_config));
+
+    let backend = vera_core::config::resolve_backend(None);
+    let local_mode = backend.is_local();
     checks.push(DoctorCheck {
         name: "effective-mode",
         status: CheckStatus::Ok,
@@ -49,19 +60,33 @@ pub fn run(json_output: bool) -> anyhow::Result<()> {
             "api".to_string()
         },
     });
+    checks.push(DoctorCheck {
+        name: "effective-backend",
+        status: CheckStatus::Ok,
+        detail: backend.to_string(),
+    });
 
     if local_mode {
+        let ep = backend
+            .execution_provider()
+            .expect("local backend must include an execution provider");
+        let runtime_path = vera_core::local_models::ort_library_path_for_ep(ep)?;
+        let runtime_check = vera_core::local_models::ensure_ort_runtime(Some(&runtime_path));
+        let runtime_detail = match &runtime_check {
+            Ok(()) => runtime_path.display().to_string(),
+            Err(err) => format!("{} ({})", runtime_path.display(), one_line_error(err)),
+        };
         checks.push(DoctorCheck {
             name: "onnx-runtime",
-            status: if vera_core::local_models::ensure_ort_runtime(None).is_ok() {
+            status: if runtime_check.is_ok() {
                 CheckStatus::Ok
             } else {
                 CheckStatus::Fail
             },
-            detail: "required for local inference".to_string(),
+            detail: runtime_detail,
         });
 
-        let model_assets = vera_core::local_models::inspect_default_local_model_files()?;
+        let model_assets = vera_core::local_models::inspect_default_local_model_files_for_ep(ep)?;
         let present = model_assets.iter().filter(|asset| asset.exists).count();
         checks.push(DoctorCheck {
             name: "local-models",
@@ -75,6 +100,9 @@ pub fn run(json_output: bool) -> anyhow::Result<()> {
                 model_assets.len()
             ),
         });
+        if probe {
+            checks.extend(probe_local_backend(ep, &runtime_path, &model_assets)?);
+        }
     } else {
         checks.push(check_env_group(
             "embedding-api",
@@ -92,6 +120,12 @@ pub fn run(json_output: bool) -> anyhow::Result<()> {
                 "RERANKER_MODEL_API_KEY",
             ],
         ));
+        if probe {
+            checks.push(skipped_check(
+                "probe",
+                "probe is only available for local ONNX backends",
+            ));
+        }
     }
 
     let cwd = std::env::current_dir()?;
@@ -109,16 +143,21 @@ pub fn run(json_output: bool) -> anyhow::Result<()> {
     let overall_ok = checks
         .iter()
         .all(|check| !matches!(check.status, CheckStatus::Fail));
-    let report = DoctorReport { overall_ok, checks };
+    let report = DoctorReport {
+        version,
+        overall_ok,
+        checks,
+    };
 
     if json_output {
         println!("{}", serde_json::to_string_pretty(&report)?);
     } else {
-        println!("Vera doctor");
+        println!("Vera doctor v{}", report.version);
         println!();
         for check in &report.checks {
             let icon = match check.status {
                 CheckStatus::Ok => "ok",
+                CheckStatus::Skip => "skip",
                 CheckStatus::Warn => "warn",
                 CheckStatus::Fail => "fail",
             };
@@ -146,4 +185,337 @@ fn check_env_group(name: &'static str, keys: &[&'static str]) -> DoctorCheck {
         status,
         detail: format!("{present}/{} variables present", keys.len()),
     }
+}
+
+fn saved_backend_check(config: &state::StoredConfig) -> DoctorCheck {
+    match config.backend {
+        Some(backend) => DoctorCheck {
+            name: "saved-backend",
+            status: CheckStatus::Ok,
+            detail: backend.to_string(),
+        },
+        None => match config.local_mode {
+            Some(true) => DoctorCheck {
+                name: "saved-backend",
+                status: CheckStatus::Warn,
+                detail: "legacy local mode config (defaults to onnx-jina-cpu)".to_string(),
+            },
+            Some(false) => DoctorCheck {
+                name: "saved-backend",
+                status: CheckStatus::Warn,
+                detail: "legacy api mode config".to_string(),
+            },
+            None => DoctorCheck {
+                name: "saved-backend",
+                status: CheckStatus::Warn,
+                detail: "not configured".to_string(),
+            },
+        },
+    }
+}
+
+fn probe_local_backend(
+    ep: vera_core::config::OnnxExecutionProvider,
+    runtime_path: &std::path::Path,
+    model_assets: &[vera_core::local_models::LocalModelAssetStatus],
+) -> anyhow::Result<Vec<DoctorCheck>> {
+    let mut checks = Vec::new();
+
+    let ort_stage = result_check(
+        "probe-ort-library",
+        runtime_path.display().to_string(),
+        vera_core::local_models::ensure_ort_runtime(Some(runtime_path)),
+    );
+    let ort_ok = matches!(ort_stage.status, CheckStatus::Ok);
+    checks.push(ort_stage);
+
+    let provider_stage = if ort_ok {
+        result_check(
+            "probe-provider-registration",
+            format!("registered {}", ep),
+            vera_core::embedding::local_provider::LocalEmbeddingProvider::probe_provider_registration(
+                ep,
+            ),
+        )
+    } else {
+        skipped_check(
+            "probe-provider-registration",
+            "skipped because ONNX Runtime could not be initialized",
+        )
+    };
+    let provider_ok = matches!(provider_stage.status, CheckStatus::Ok);
+    checks.push(provider_stage);
+
+    let embedding_session_stage = if ort_ok && provider_ok {
+        let missing = missing_assets(model_assets, &["embedding-onnx", "embedding-onnx-data"]);
+        if missing.is_empty() {
+            result_check(
+                "probe-embedding-session",
+                "embedding session created".to_string(),
+                vera_core::embedding::local_provider::LocalEmbeddingProvider::probe_session(ep),
+            )
+        } else {
+            skipped_check(
+                "probe-embedding-session",
+                format!("skipped because assets are missing: {}", missing.join(", ")),
+            )
+        }
+    } else {
+        skipped_check(
+            "probe-embedding-session",
+            "skipped because provider registration failed",
+        )
+    };
+    checks.push(embedding_session_stage);
+
+    let reranker_session_stage = if ort_ok && provider_ok {
+        let missing = missing_assets(model_assets, &["reranker-onnx"]);
+        if missing.is_empty() {
+            result_check(
+                "probe-reranker-session",
+                "reranker session created".to_string(),
+                vera_core::retrieval::local_reranker::LocalReranker::probe_session(ep),
+            )
+        } else {
+            skipped_check(
+                "probe-reranker-session",
+                format!("skipped because assets are missing: {}", missing.join(", ")),
+            )
+        }
+    } else {
+        skipped_check(
+            "probe-reranker-session",
+            "skipped because provider registration failed",
+        )
+    };
+    checks.push(reranker_session_stage);
+
+    let tiny_inference_stage = if ort_ok && provider_ok {
+        let missing = missing_assets(
+            model_assets,
+            &[
+                "embedding-onnx",
+                "embedding-onnx-data",
+                "embedding-tokenizer",
+                "reranker-onnx",
+                "reranker-tokenizer",
+            ],
+        );
+        if missing.is_empty() {
+            let result =
+                vera_core::embedding::local_provider::LocalEmbeddingProvider::probe_inference(ep)
+                    .map_err(|err| anyhow::anyhow!("embedding probe failed: {err}"))
+                    .and_then(|_| {
+                        vera_core::retrieval::local_reranker::LocalReranker::probe_inference(ep)
+                            .map_err(|err| anyhow::anyhow!("reranker probe failed: {err}"))
+                    });
+            result_check(
+                "probe-tiny-inference",
+                "embedding and reranker returned finite outputs".to_string(),
+                result,
+            )
+        } else {
+            skipped_check(
+                "probe-tiny-inference",
+                format!("skipped because assets are missing: {}", missing.join(", ")),
+            )
+        }
+    } else {
+        skipped_check(
+            "probe-tiny-inference",
+            "skipped because provider registration failed",
+        )
+    };
+    let tiny_inference_ok = matches!(tiny_inference_stage.status, CheckStatus::Ok);
+    checks.push(tiny_inference_stage);
+
+    if ep != vera_core::config::OnnxExecutionProvider::Cpu {
+        checks.push(if tiny_inference_ok {
+            DoctorCheck {
+                name: "probe-provider-confirmation",
+                status: CheckStatus::Warn,
+                detail: "session init and tiny inference succeeded, but active GPU execution cannot be confirmed via the ONNX Runtime Rust API; check trace logs for provider registration details".to_string(),
+            }
+        } else {
+            skipped_check(
+                "probe-provider-confirmation",
+                "skipped because the tiny inference probe did not succeed",
+            )
+        });
+    }
+
+    checks.push(dependency_probe_check(runtime_path));
+    Ok(checks)
+}
+
+fn missing_assets(
+    model_assets: &[vera_core::local_models::LocalModelAssetStatus],
+    required: &[&str],
+) -> Vec<&'static str> {
+    required
+        .iter()
+        .filter_map(|required_name| {
+            model_assets
+                .iter()
+                .find(|asset| asset.name == *required_name)
+                .filter(|asset| !asset.exists)
+                .map(|asset| asset.name)
+        })
+        .collect()
+}
+
+fn result_check(
+    name: &'static str,
+    success_detail: String,
+    result: anyhow::Result<()>,
+) -> DoctorCheck {
+    match result {
+        Ok(()) => DoctorCheck {
+            name,
+            status: CheckStatus::Ok,
+            detail: success_detail,
+        },
+        Err(err) => DoctorCheck {
+            name,
+            status: CheckStatus::Fail,
+            detail: one_line_error(&err),
+        },
+    }
+}
+
+fn skipped_check(name: &'static str, detail: impl Into<String>) -> DoctorCheck {
+    DoctorCheck {
+        name,
+        status: CheckStatus::Skip,
+        detail: detail.into(),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn dependency_probe_check(runtime_path: &std::path::Path) -> DoctorCheck {
+    if !runtime_path.exists() {
+        return skipped_check(
+            "probe-dependencies",
+            format!("skipped because {} is missing", runtime_path.display()),
+        );
+    }
+
+    if std::process::Command::new("ldd")
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_err()
+    {
+        return skipped_check("probe-dependencies", "`ldd` is not available");
+    }
+
+    let mut targets = vec![runtime_path.to_path_buf()];
+    if let Some(dir) = runtime_path.parent() {
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+                    continue;
+                };
+                if name.starts_with("libonnxruntime")
+                    && name.contains(".so")
+                    && path != runtime_path
+                {
+                    targets.push(path);
+                }
+            }
+        }
+    }
+    targets.sort();
+    targets.dedup();
+
+    let mut missing = Vec::new();
+    for target in targets {
+        let output = match std::process::Command::new("ldd").arg(&target).output() {
+            Ok(output) => output,
+            Err(err) => {
+                return DoctorCheck {
+                    name: "probe-dependencies",
+                    status: CheckStatus::Warn,
+                    detail: format!("failed to run `ldd` on {}: {}", target.display(), err),
+                };
+            }
+        };
+        let text = format!(
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        for line in text.lines().filter(|line| line.contains("not found")) {
+            let file_name = target
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("unknown");
+            missing.push(format!("{file_name}: {}", line.trim()));
+        }
+    }
+
+    if missing.is_empty() {
+        DoctorCheck {
+            name: "probe-dependencies",
+            status: CheckStatus::Ok,
+            detail: "ldd found no unresolved ONNX Runtime dependencies".to_string(),
+        }
+    } else {
+        DoctorCheck {
+            name: "probe-dependencies",
+            status: CheckStatus::Fail,
+            detail: format!("missing shared libraries: {}", missing.join("; ")),
+        }
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn dependency_probe_check(_: &std::path::Path) -> DoctorCheck {
+    skipped_check(
+        "probe-dependencies",
+        "dependency inspection is currently implemented only on Linux",
+    )
+}
+
+fn version_check(status: &update_check::BinaryVersionStatus) -> DoctorCheck {
+    let detail = match status.latest_version.as_deref() {
+        Some(latest) if status.update_available() => match status.source {
+            VersionCheckSource::Live => format!(
+                "v{latest} available (current: v{}; update: `{}`)",
+                status.current_version,
+                status.update_command()
+            ),
+            VersionCheckSource::Cache => format!(
+                "v{latest} available (cached; current: v{}; update: `{}`)",
+                status.current_version,
+                status.update_command()
+            ),
+            VersionCheckSource::Unavailable => unreachable!(),
+        },
+        Some(latest) => match status.source {
+            VersionCheckSource::Live => format!("up to date (latest: v{latest})"),
+            VersionCheckSource::Cache => format!("up to date (cached latest: v{latest})"),
+            VersionCheckSource::Unavailable => unreachable!(),
+        },
+        None => "could not check GitHub releases".to_string(),
+    };
+
+    DoctorCheck {
+        name: "version-check",
+        status: if status.update_available() || status.latest_version.is_none() {
+            CheckStatus::Warn
+        } else {
+            CheckStatus::Ok
+        },
+        detail,
+    }
+}
+
+fn one_line_error(err: &anyhow::Error) -> String {
+    err.to_string()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }

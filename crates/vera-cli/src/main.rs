@@ -182,12 +182,18 @@ enum Commands {
         long_about = "Inspect the current Vera setup for common configuration issues.\n\n\
                       Checks the persisted config, effective mode, local runtime or \
                       API environment variables, and whether the current repository \
-                      has a `.vera/` index.\n\n\
+                      has a `.vera/` index. `--probe` adds a deeper read-only ONNX \
+                      session probe and never downloads or repairs missing assets.\n\n\
                       Examples:\n  \
                       vera doctor\n  \
+                      vera doctor --probe\n  \
                       vera doctor --json"
     )]
-    Doctor,
+    Doctor {
+        /// Run a deeper read-only probe of local ONNX session init.
+        #[arg(long, visible_alias = "deep")]
+        probe: bool,
+    },
 
     /// Index a codebase for search.
     ///
@@ -507,9 +513,9 @@ fn main() {
             tracing::info!("uninstall command");
             commands::uninstall::run(cli.json)
         }
-        Commands::Doctor => {
+        Commands::Doctor { probe } => {
             tracing::info!("doctor command");
-            commands::doctor::run(cli.json)
+            commands::doctor::run(cli.json, probe)
         }
         Commands::Index {
             path,
@@ -719,7 +725,13 @@ mod tests {
     #[test]
     fn cli_parses_doctor_command() {
         let cli = Cli::parse_from(["vera", "doctor"]);
-        assert!(matches!(cli.command, Commands::Doctor));
+        assert!(matches!(cli.command, Commands::Doctor { probe: false }));
+    }
+
+    #[test]
+    fn cli_parses_doctor_probe_command() {
+        let cli = Cli::parse_from(["vera", "doctor", "--probe"]);
+        assert!(matches!(cli.command, Commands::Doctor { probe: true }));
     }
 
     #[test]

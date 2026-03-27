@@ -1,7 +1,7 @@
 use crate::config::OnnxExecutionProvider;
 use crate::local_models::ensure_model_file;
 use crate::retrieval::reranker::{RerankScore, Reranker, RerankerError};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use ort::session::{Session, builder::GraphOptimizationLevel};
 use std::sync::{Arc, Mutex};
 use tokenizers::Tokenizer;
@@ -47,44 +47,49 @@ impl LocalReranker {
                 message: format!("Failed to download tokenizer: {}", e),
             })?;
 
-        let tokenizer = task::spawn_blocking(move || {
-            Tokenizer::from_file(tokenizer_path)
-                .map_err(|e| anyhow::anyhow!("Tokenizer init failed: {}", e))
-        })
-        .await
-        .map_err(|e| RerankerError::ApiError {
-            status: 500,
-            message: e.to_string(),
-        })?
-        .map_err(|e| RerankerError::ApiError {
-            status: 500,
-            message: e.to_string(),
-        })?;
+        let tokenizer = task::spawn_blocking(move || load_tokenizer(tokenizer_path))
+            .await
+            .map_err(|e| RerankerError::ApiError {
+                status: 500,
+                message: e.to_string(),
+            })?
+            .map_err(|e| RerankerError::ApiError {
+                status: 500,
+                message: e.to_string(),
+            })?;
 
-        let session = task::spawn_blocking(move || {
-            let threads = std::thread::available_parallelism()
-                .map(|n| n.get())
-                .unwrap_or(1);
-            let builder = ort::session::builder::SessionBuilder::new()?
-                .with_optimization_level(GraphOptimizationLevel::Level3)?
-                .with_intra_threads(threads)?;
-            let builder = register_execution_provider(builder, ep)?;
-            builder.commit_from_file(onnx_path)
-        })
-        .await
-        .map_err(|e| RerankerError::ApiError {
-            status: 500,
-            message: e.to_string(),
-        })?
-        .map_err(|e| RerankerError::ApiError {
-            status: 500,
-            message: crate::local_models::wrap_ort_error(e),
-        })?;
+        let session = task::spawn_blocking(move || build_session(ep, onnx_path))
+            .await
+            .map_err(|e| RerankerError::ApiError {
+                status: 500,
+                message: e.to_string(),
+            })?
+            .map_err(|e| RerankerError::ApiError {
+                status: 500,
+                message: crate::local_models::wrap_ort_error(e),
+            })?;
 
         Ok(Self {
             session: Arc::new(Mutex::new(session)),
             tokenizer: Arc::new(tokenizer),
         })
+    }
+
+    pub fn probe_session(ep: OnnxExecutionProvider) -> Result<()> {
+        let ort_path = crate::local_models::ort_library_path_for_ep(ep)?;
+        crate::local_models::ensure_ort_runtime(Some(&ort_path))?;
+        let (onnx_path, _) = default_asset_paths()?;
+        let _ = build_session(ep, onnx_path)?;
+        Ok(())
+    }
+
+    pub fn probe_inference(ep: OnnxExecutionProvider) -> Result<()> {
+        let ort_path = crate::local_models::ort_library_path_for_ep(ep)?;
+        crate::local_models::ensure_ort_runtime(Some(&ort_path))?;
+        let (onnx_path, tokenizer_path) = default_asset_paths()?;
+        let mut session = build_session(ep, onnx_path)?;
+        let tokenizer = load_tokenizer(tokenizer_path)?;
+        run_probe_inference(&mut session, &tokenizer)
     }
 
     #[allow(clippy::needless_range_loop)]
@@ -198,6 +203,75 @@ impl LocalReranker {
         });
         Ok(combined)
     }
+}
+
+fn default_asset_paths() -> Result<(std::path::PathBuf, std::path::PathBuf)> {
+    let model_dir = crate::local_models::vera_home_dir()?
+        .join("models")
+        .join(RERANKER_REPO);
+    Ok((model_dir.join(ONNX_FILE), model_dir.join(TOKENIZER_FILE)))
+}
+
+fn load_tokenizer(tokenizer_path: std::path::PathBuf) -> Result<Tokenizer> {
+    Tokenizer::from_file(&tokenizer_path)
+        .map_err(|e| anyhow::anyhow!("Tokenizer init failed: {}", e))
+}
+
+fn build_session(ep: OnnxExecutionProvider, onnx_path: std::path::PathBuf) -> Result<Session> {
+    let threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1);
+    let builder = ort::session::builder::SessionBuilder::new()?
+        .with_optimization_level(GraphOptimizationLevel::Level3)?
+        .with_intra_threads(threads)?;
+    let builder = register_execution_provider(builder, ep)?;
+    builder
+        .commit_from_file(&onnx_path)
+        .with_context(|| format!("failed to load reranker model {}", onnx_path.display()))
+}
+
+fn run_probe_inference(session: &mut Session, tokenizer: &Tokenizer) -> Result<()> {
+    let encoding = tokenizer
+        .encode(
+            (
+                "vera doctor probe".to_string(),
+                "diagnose the selected execution provider".to_string(),
+            ),
+            true,
+        )
+        .map_err(|e| anyhow::anyhow!("Tokenizer error: {}", e))?;
+
+    let ids = encoding.get_ids();
+    let mask = encoding.get_attention_mask();
+    let max_len = ids.len().max(1);
+    let mut input_ids = ndarray::Array2::<i64>::zeros((1, max_len));
+    let mut attention_mask = ndarray::Array2::<i64>::zeros((1, max_len));
+
+    for (index, token_id) in ids.iter().enumerate() {
+        input_ids[[0, index]] = *token_id as i64;
+    }
+    for (index, mask_value) in mask.iter().enumerate() {
+        attention_mask[[0, index]] = *mask_value as i64;
+    }
+
+    let inputs = ort::inputs![
+        "input_ids" => ort::value::Tensor::from_array(input_ids)?,
+        "attention_mask" => ort::value::Tensor::from_array(attention_mask)?,
+    ];
+
+    let outputs = session.run(inputs)?;
+    let output = outputs
+        .values()
+        .next()
+        .context("reranker model produced no outputs")?;
+    let (_, data) = output.try_extract_tensor::<f32>()?;
+    if data.is_empty() {
+        anyhow::bail!("reranker output tensor was empty");
+    }
+    if !data.iter().all(|value| value.is_finite()) {
+        anyhow::bail!("reranker output contained non-finite values");
+    }
+    Ok(())
 }
 
 impl Reranker for LocalReranker {

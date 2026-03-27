@@ -243,20 +243,18 @@ fn ort_platform_info(
 /// Respects `ORT_DYLIB_PATH` — if set, skips auto-download.
 /// GPU execution providers download a different (larger) ORT build.
 pub async fn ensure_ort_library_for_ep(ep: OnnxExecutionProvider) -> Result<PathBuf> {
+    let target_path = ort_library_path_for_ep(ep)?;
     if let Ok(path) = std::env::var("ORT_DYLIB_PATH") {
         if !path.is_empty() {
-            return Ok(PathBuf::from(path));
+            return Ok(target_path);
         }
     }
 
-    // Store GPU variants in separate subdirectories to avoid conflicts.
-    let lib_dir = if ep == OnnxExecutionProvider::Cpu {
-        vera_home_dir()?.join("lib")
-    } else {
-        vera_home_dir()?.join("lib").join(ep.to_string())
-    };
+    let lib_dir = target_path
+        .parent()
+        .context("failed to determine ONNX Runtime directory")?
+        .to_path_buf();
     let (ext, archive_name, lib_path_in_archive, local_lib_name) = ort_platform_info(ep)?;
-    let target_path = lib_dir.join(local_lib_name);
     let is_gpu = ep != OnnxExecutionProvider::Cpu;
 
     if target_path.exists() {
@@ -320,6 +318,33 @@ pub async fn ensure_ort_library_for_ep(ep: OnnxExecutionProvider) -> Result<Path
         lib_dir.display()
     );
     Ok(target_path)
+}
+
+pub fn ort_library_path_for_ep(ep: OnnxExecutionProvider) -> Result<PathBuf> {
+    if let Ok(path) = std::env::var("ORT_DYLIB_PATH") {
+        if !path.is_empty() {
+            return Ok(PathBuf::from(path));
+        }
+    }
+
+    let vera_home = vera_home_dir()?;
+    let lib_dir = if ep == OnnxExecutionProvider::Cpu {
+        vera_home.join("lib")
+    } else {
+        vera_home.join("lib").join(ep.to_string())
+    };
+
+    Ok(lib_dir.join(platform_ort_lib_name()))
+}
+
+fn platform_ort_lib_name() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "onnxruntime.dll"
+    } else if cfg!(target_os = "macos") {
+        "libonnxruntime.dylib"
+    } else {
+        "libonnxruntime.so"
+    }
 }
 
 /// Extract a single shared library from a tgz archive (CPU builds).
@@ -544,18 +569,17 @@ pub async fn prefetch_default_local_models() -> Result<Vec<PathBuf>> {
 
 /// Inspect the default local assets without downloading anything.
 pub fn inspect_default_local_model_files() -> Result<Vec<LocalModelAssetStatus>> {
+    inspect_default_local_model_files_for_ep(OnnxExecutionProvider::Cpu)
+}
+
+/// Inspect the default local assets for a specific execution provider.
+pub fn inspect_default_local_model_files_for_ep(
+    ep: OnnxExecutionProvider,
+) -> Result<Vec<LocalModelAssetStatus>> {
     let vera_home = vera_home_dir()?;
 
-    let ort_lib_name = if cfg!(target_os = "windows") {
-        "onnxruntime.dll"
-    } else if cfg!(target_os = "macos") {
-        "libonnxruntime.dylib"
-    } else {
-        "libonnxruntime.so"
-    };
-
     let assets = [
-        ("onnx-runtime", vera_home.join("lib").join(ort_lib_name)),
+        ("onnx-runtime", ort_library_path_for_ep(ep)?),
         (
             "embedding-onnx",
             vera_home

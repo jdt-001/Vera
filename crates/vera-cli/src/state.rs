@@ -12,6 +12,8 @@ pub struct StoredConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub local_mode: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend: Option<vera_core::config::InferenceBackend>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub embedding_api: Option<ApiEndpointConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reranker_api: Option<ApiEndpointConfig>,
@@ -48,9 +50,10 @@ pub fn load_saved_secrets() -> Result<StoredSecrets> {
     load_json_file(&credentials_path()?)
 }
 
-pub fn save_local_mode(enabled: bool) -> Result<()> {
+pub fn save_backend(backend: vera_core::config::InferenceBackend) -> Result<()> {
     let mut config = load_saved_config()?;
-    config.local_mode = Some(enabled);
+    config.backend = Some(backend);
+    config.local_mode = Some(backend.is_local());
     save_config(&config)
 }
 
@@ -62,6 +65,7 @@ pub fn save_runtime_config(config: &vera_core::config::VeraConfig) -> Result<()>
 
 pub fn save_api_setup(embedding: &ApiSetupInput, reranker: Option<&ApiSetupInput>) -> Result<()> {
     let mut config = load_saved_config()?;
+    config.backend = Some(vera_core::config::InferenceBackend::Api);
     config.local_mode = Some(false);
     config.embedding_api = Some(ApiEndpointConfig {
         base_url: embedding.base_url.clone(),
@@ -117,7 +121,14 @@ fn apply_saved_env_impl(force: bool) -> Result<()> {
     let config = load_saved_config()?;
     let secrets = load_saved_secrets()?;
 
-    if let Some(local_mode) = config.local_mode {
+    if let Some(backend) = config.backend {
+        set_env_value("VERA_BACKEND", &backend.to_string(), force);
+        set_env_value(
+            "VERA_LOCAL",
+            if backend.is_local() { "1" } else { "0" },
+            force,
+        );
+    } else if let Some(local_mode) = config.local_mode {
         set_env_value("VERA_LOCAL", if local_mode { "1" } else { "0" }, force);
     }
 
@@ -241,6 +252,7 @@ mod tests {
     fn stored_config_defaults_are_empty() {
         let config = StoredConfig::default();
         assert!(config.local_mode.is_none());
+        assert!(config.backend.is_none());
         assert!(config.embedding_api.is_none());
         assert!(config.reranker_api.is_none());
         assert!(config.core_config.is_none());
