@@ -244,25 +244,7 @@ vera update . --exclude "vendor/**"
 
 Power-user flags: `--no-ignore` disables all ignore file parsing, `--no-default-excludes` disables the built-in exclusions (node_modules, .git, target, etc.).
 
-Other useful commands:
-
-```bash
-vera doctor                    # diagnose setup issues
-vera stats                     # index statistics
-vera config                    # show current configuration
-vera agent install             # install skill files for AI agents
-vera agent status --scope all  # check skill installation status
-```
-
-Uninstall Vera and all its data:
-
-```bash
-vera uninstall
-```
-
-This removes `~/.vera/` (binary cache, models, ONNX Runtime libs, config), agent skill files, and the PATH shim. Per-project indexes (`.vera/` inside each project) are left in place. Delete them manually if needed.
-
-If something isn't working, see [troubleshooting](docs/troubleshooting.md).
+### Output Format
 
 Output uses markdown codeblocks by default, the most token-efficient format for AI agents:
 
@@ -273,6 +255,26 @@ pub fn authenticate(credentials: &Credentials) -> Result<Token> { ... }
 ````
 
 Use `--json` for compact single-line JSON (useful for programmatic consumption or piping to other tools), or `--raw` for verbose human-readable output with all fields. Use `--timing` to print per-stage pipeline durations (embedding, BM25, vector, fusion, reranking) to stderr.
+
+### Other Commands
+
+```bash
+vera doctor                    # diagnose setup issues
+vera stats                     # index statistics
+vera config                    # show current configuration
+vera agent install             # install skill files for AI agents
+vera agent status --scope all  # check skill installation status
+```
+
+### Uninstalling
+
+```bash
+vera uninstall
+```
+
+This removes `~/.vera/` (binary cache, models, ONNX Runtime libs, config), agent skill files, and the PATH shim. Per-project indexes (`.vera/` inside each project) are left in place. Delete them manually if needed.
+
+If something isn't working, see [troubleshooting](docs/troubleshooting.md).
 
 ## Benchmark Snapshot
 
