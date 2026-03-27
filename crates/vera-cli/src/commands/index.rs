@@ -15,6 +15,7 @@ pub fn run(
     exclude: Vec<String>,
     no_ignore: bool,
     no_default_excludes: bool,
+    verbose: bool,
 ) -> anyhow::Result<()> {
     let summary = execute(path, backend, exclude, no_ignore, no_default_excludes)?;
 
@@ -23,7 +24,7 @@ pub fn run(
             .map_err(|e| anyhow::anyhow!("failed to serialize summary: {e}"))?;
         println!("{json}");
     } else {
-        print_human_summary(&summary);
+        print_human_summary(&summary, verbose);
     }
 
     Ok(())

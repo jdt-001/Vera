@@ -165,8 +165,26 @@ pub fn output_results(results: &[vera_core::types::SearchResult], json_output: b
     }
 }
 
+/// Format a byte count as a compact human-readable string (e.g. "1.2 MB").
+fn format_bytes(bytes: u64) -> String {
+    const KB: f64 = 1_024.0;
+    const MB: f64 = 1_024.0 * KB;
+    const GB: f64 = 1_024.0 * MB;
+    let b = bytes as f64;
+    if b >= GB {
+        format!("{:.1} GB", b / GB)
+    } else if b >= MB {
+        format!("{:.1} MB", b / MB)
+    } else {
+        format!("{:.1} KB", b / KB)
+    }
+}
+
 /// Print a human-readable summary of the indexing run.
-pub fn print_human_summary(summary: &vera_core::indexing::IndexSummary) {
+///
+/// When `verbose` is true, individual file paths are listed for skipped-file
+/// categories. Otherwise only counts are shown with a hint to rerun with `-v`.
+pub fn print_human_summary(summary: &vera_core::indexing::IndexSummary, verbose: bool) {
     println!("Indexing complete!");
     println!();
     println!("  Files parsed:        {}", summary.files_parsed);
@@ -184,9 +202,18 @@ pub fn print_human_summary(summary: &vera_core::indexing::IndexSummary) {
         }
         if summary.large_skipped > 0 {
             println!("    Too large:  {}", summary.large_skipped);
+            if verbose {
+                for (path, size) in &summary.large_skipped_paths {
+                    println!("      - {path} ({size})", size = format_bytes(*size));
+                }
+            }
         }
         if summary.error_skipped > 0 {
             println!("    Read errors: {}", summary.error_skipped);
+        }
+        if !verbose && !summary.large_skipped_paths.is_empty() {
+            println!();
+            println!("  Rerun with --verbose (-v) to see skipped file paths.");
         }
     }
 

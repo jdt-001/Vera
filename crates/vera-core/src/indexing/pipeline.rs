@@ -37,6 +37,8 @@ pub struct IndexSummary {
     pub binary_skipped: usize,
     /// Number of files skipped due to size threshold.
     pub large_skipped: usize,
+    /// Relative paths and sizes (bytes) of files skipped due to size threshold.
+    pub large_skipped_paths: Vec<(String, u64)>,
     /// Number of files skipped due to permission or read errors.
     pub error_skipped: usize,
     /// Files that had parse errors (path + error message).
@@ -120,6 +122,7 @@ pub async fn index_repository<P: EmbeddingProvider>(
             embeddings_generated: 0,
             binary_skipped: discovery.binary_skipped,
             large_skipped: discovery.large_skipped,
+            large_skipped_paths: discovery.large_skipped_paths.clone(),
             error_skipped: discovery.error_skipped,
             parse_errors: Vec::new(),
             elapsed_secs: start.elapsed().as_secs_f64(),
@@ -151,6 +154,7 @@ pub async fn index_repository<P: EmbeddingProvider>(
             embeddings_generated: 0,
             binary_skipped: discovery.binary_skipped,
             large_skipped: discovery.large_skipped,
+            large_skipped_paths: discovery.large_skipped_paths.clone(),
             error_skipped: discovery.error_skipped,
             parse_errors,
             elapsed_secs: start.elapsed().as_secs_f64(),
@@ -195,6 +199,7 @@ pub async fn index_repository<P: EmbeddingProvider>(
         embeddings_generated: embeddings.len(),
         binary_skipped: discovery.binary_skipped,
         large_skipped: discovery.large_skipped,
+        large_skipped_paths: discovery.large_skipped_paths,
         error_skipped: discovery.error_skipped,
         parse_errors,
         elapsed_secs: start.elapsed().as_secs_f64(),

@@ -42,6 +42,8 @@ pub struct DiscoveryResult {
     pub binary_skipped: usize,
     /// Number of files skipped because they exceeded the size threshold.
     pub large_skipped: usize,
+    /// Relative paths and sizes (bytes) of files skipped because they exceeded the size threshold.
+    pub large_skipped_paths: Vec<(String, u64)>,
     /// Number of files skipped due to read errors (permissions, etc.).
     pub error_skipped: usize,
 }
@@ -127,6 +129,7 @@ pub fn discover_files(root: &Path, config: &IndexingConfig) -> Result<DiscoveryR
     let mut files = Vec::new();
     let mut binary_skipped = 0usize;
     let mut large_skipped = 0usize;
+    let mut large_skipped_paths = Vec::new();
     let mut error_skipped = 0usize;
 
     for entry in walker.build() {
@@ -165,6 +168,10 @@ pub fn discover_files(root: &Path, config: &IndexingConfig) -> Result<DiscoveryR
                 size,
                 config.max_file_size_bytes
             );
+            let rel = path.strip_prefix(&root)
+                .map(|r| r.to_string_lossy().to_string())
+                .unwrap_or_else(|_| path.to_string_lossy().to_string());
+            large_skipped_paths.push((rel, size));
             large_skipped += 1;
             continue;
         }
@@ -219,6 +226,7 @@ pub fn discover_files(root: &Path, config: &IndexingConfig) -> Result<DiscoveryR
         files,
         binary_skipped,
         large_skipped,
+        large_skipped_paths,
         error_skipped,
     })
 }

@@ -255,6 +255,9 @@ enum Commands {
         /// Disable smart default exclusions.
         #[arg(long)]
         no_default_excludes: bool,
+        /// Show detailed information (e.g. paths of skipped files).
+        #[arg(long, short = 'v')]
+        verbose: bool,
     },
 
     /// Search the indexed codebase.
@@ -471,6 +474,7 @@ fn main() {
             exclude,
             no_ignore,
             no_default_excludes,
+            verbose,
         } => {
             tracing::info!(path = %path, "indexing");
             commands::index::run(
@@ -480,6 +484,7 @@ fn main() {
                 exclude,
                 no_ignore,
                 no_default_excludes,
+                verbose,
             )
         }
         Commands::Search {
