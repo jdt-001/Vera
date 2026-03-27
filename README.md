@@ -13,7 +13,7 @@
 
 Vera is a code search tool built in Rust that combines BM25 keyword matching, vector similarity, and cross-encoder reranking into a single retrieval pipeline. It parses 60+ languages with tree-sitter, runs everything locally, and returns structured JSON with file paths, line ranges, symbol metadata, and relevance scores.
 
-Every decision made is intentional, with ample research, testing, analysis, benchmarking and evaluation for each one. I made this to succeed my fork, Pampax, which was an attempt to fix up someone else's vibeslop project because I couldnt find any other tools like it, that actually supported model/provider-agnostic reranking. I learned a lot from that project and realized I could make something way better if I built it from scratch. I've tested and tried a lot of agents and tools, and knew exactly what I wanted from this one. I made it to be the very best at what it does.  
+I built Vera after maintaining Pampax, a fork of someone else's code search tool that I tried to fix up because nothing else supported provider-agnostic reranking. That project taught me what mattered and what didn't, so I started from scratch. Every design choice here (the retrieval pipeline, the model selection, the output format) comes from real benchmarking and evaluation, not guesswork.
 
 ## Table of Contents
 
@@ -28,7 +28,7 @@ Every decision made is intentional, with ample research, testing, analysis, benc
 - [How It Works](#how-it-works)
 - [Contributing](#contributing)
 
-**Docs:** [Query Guide](docs/query-guide.md) · [Benchmarks](docs/benchmarks.md) · [How It Works](docs/how-it-works.md) · [Docker](docs/docker.md) · [Supported Languages](docs/supported-languages.md) · [Troubleshooting](docs/troubleshooting.md)
+**Docs:** [Query Guide](docs/query-guide.md) · [Benchmarks](docs/benchmarks.md) · [How It Works](docs/how-it-works.md) · [Models](docs/models.md) · [Docker](docs/docker.md) · [Supported Languages](docs/supported-languages.md) · [Troubleshooting](docs/troubleshooting.md)
 
 ## Quick Start
 
@@ -49,13 +49,13 @@ Most code indexing tools retrieve candidates and stop there. Vera adds a cross-e
 
 Vera ships as one static binary with all 60+ language grammars compiled in via tree-sitter. No Python runtime, no language servers, no per-language toolchains to install or manage. Drop the binary on any machine, run `vera setup`, and the full search pipeline is ready. Tools like Serena require a Python runtime and uv just to start, plus separate LSP dependencies for some languages. Vera has zero external dependencies.
 
-### Higher accuracy than other tools, proven on real codebases
+### Higher accuracy, proven on real codebases
 
-On the same 17-task benchmark suite, Vera's hybrid pipeline scores `0.80` nDCG@10 and `0.70` Recall@5, compared to `0.52` nDCG@10 for cocoindex-code and `0.71` nDCG@10 for vector-only search. Since that public comparison, Vera's internal 21-task benchmark (across `ripgrep`, `flask`, `fastify`, `turborepo`) improved further to `0.84` nDCG@10 with `0.78` Recall@5 and `0.91` MRR@10. See [Benchmark Snapshot](#benchmark-snapshot) for the full comparison.
+On a 17-task benchmark across `ripgrep`, `flask`, and `fastify`, Vera's hybrid pipeline scores `0.80` nDCG@10 and `0.70` Recall@5, compared to `0.52` nDCG@10 for cocoindex-code and `0.71` for vector-only search. The current 21-task suite scores even higher. See [Benchmark Snapshot](#benchmark-snapshot) for the full numbers.
 
 ### Token-efficient output, built for AI agents
 
-Most code search tools dump verbose pretty-printed JSON with fields agents don't need (scores, language tags inferrable from file extensions, null placeholders). Vera defaults to markdown codeblocks, the most token-efficient structured format, cutting output size by roughly 35-40% compared to typical JSON. It also ships with skill files that teach agents how to write effective queries, what filters to use, and when to reach for `rg` instead. Other tools leave agents to figure this out from generic help text.
+Vera defaults to markdown codeblocks, cutting output size ~35-40% compared to typical JSON. It ships with skill files that teach agents how to write effective queries, what filters to use, and when to reach for `rg` instead.
 
 ## Features
 
@@ -156,8 +156,10 @@ Vera itself is always local: the index lives in `.vera/`, config in `~/.vera/`. 
 
 `vera setup` downloads quantized ONNX models into `~/.vera/models/` and the ONNX Runtime shared library into `~/.vera/lib/`, then runs inference locally. No manual install required:
 
-- **Embeddings:** [`jinaai/jina-embeddings-v5-text-nano-retrieval`](https://huggingface.co/jinaai/jina-embeddings-v5-text-nano-retrieval) (quantized ONNX). At 239M parameters, this is the highest scoring embedding model under 500M on MMTEB (65.5), beating KaLM-mini-v2.5 (494M), Gemma-300M (308M), and voyage-4-nano (480M). It scores 71.0 on MTEB English v2. Built on EuroBERT-210M with distillation from Qwen3-Embedding-4B, it uses a retrieval-specific LoRA adapter designed for asymmetric search where the query is short and the document is a code block.
-- **Reranker:** [`jinaai/jina-reranker-v2-base-multilingual`](https://huggingface.co/jinaai/jina-reranker-v2-base-multilingual) (quantized ONNX). A 278M parameter cross-encoder that scores query-document pairs jointly rather than comparing pre-computed embeddings. Its 1,024-token context window is a natural fit for Vera's tree-sitter symbol chunks: discrete functions and classes, not raw files. Fine-tuned on ToolBench (function-calling schemas) and NSText2SQL (structured queries), it scores 71.36 on CodeSearchNet MRR@10 and 77.75 on ToolBench recall@3 while being half the size and 15x faster than bge-reranker-v2-m3 (568M).
+- **Embeddings:** [`jina-embeddings-v5-text-nano-retrieval`](https://huggingface.co/jinaai/jina-embeddings-v5-text-nano-retrieval) (239M, quantized ONNX). Highest-scoring embedding model under 500M parameters on MMTEB. Uses a retrieval-specific LoRA adapter designed for asymmetric search (short query, long code block).
+- **Reranker:** [`jina-reranker-v2-base-multilingual`](https://huggingface.co/jinaai/jina-reranker-v2-base-multilingual) (278M, quantized ONNX). Cross-encoder that scores query-document pairs jointly. Half the size and 15x faster than bge-reranker-v2-m3.
+
+For detailed model specs, benchmarks, and training details, see [docs/models.md](docs/models.md).
 
 With both models cached locally, the full three-stage pipeline (BM25, vector search, rerank) runs without any external calls. This gives you:
 
@@ -272,9 +274,7 @@ Use `--json` for compact single-line JSON (useful for programmatic consumption o
 
 ## Benchmark Snapshot
 
-The public comparison snapshot below is older and reflects the `v0.4.0` era pipeline and nearby public runs, not the current `v0.7.0` retrieval quality. It is kept here because it compares Vera against other tools on the same workload. Since `v0.4.0`, Vera's internal 21-task benchmark improved roughly 55% on Recall@5 and 83% on nDCG@10. More detail: [`v0.7.0` accuracy improvements](docs/releases/v0.7.0-accuracy-improvements.md).
-
-The older public benchmark suite covers 17 tasks across three open-source codebases (`ripgrep`, `flask`, `fastify`) and five workload categories: symbol lookup, intent search, cross-file discovery, config lookup, and disambiguation.
+Public comparison from `v0.4.0` (kept because it compares Vera against other tools on the same workload). Vera has improved ~55% on Recall@5 and ~83% on nDCG@10 since then. 17 tasks across `ripgrep`, `flask`, `fastify`:
 
 | Metric | ripgrep | cocoindex-code | vector-only | Vera hybrid |
 |--------|---------|----------------|-------------|-------------|
@@ -283,9 +283,9 @@ The older public benchmark suite covers 17 tasks across three open-source codeba
 | MRR@10 | 0.2625 | 0.3517 | 0.2814 | **0.6009** |
 | nDCG@10 | 0.2929 | 0.5206 | 0.7077 | **0.8008** |
 
-#### Improvements Since `v0.4.0`
+#### Current Results (`v0.7.0+`)
 
-The current local Jina CUDA ONNX release benchmark for `v0.7.0` uses 21 tasks across `ripgrep`, `flask`, `fastify`, and `turborepo`:
+21 tasks across `ripgrep`, `flask`, `fastify`, and `turborepo`:
 
 | Version | Recall@1 | Recall@5 | Recall@10 | MRR@10 | nDCG@10 |
 |--------|----------|----------|-----------|--------|---------|
