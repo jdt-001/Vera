@@ -18,6 +18,7 @@ vera setup --onnx-jina-cuda       # NVIDIA GPU (CUDA 12+)
 vera setup --onnx-jina-rocm       # AMD GPU (Linux, ROCm)
 vera setup --onnx-jina-directml   # DirectX 12 GPU (Windows)
 vera setup --onnx-jina-coreml     # Apple Silicon (macOS, M1/M2/M3/M4)
+vera setup --onnx-jina-openvino  # Intel GPU/iGPU (Linux only)
 ```
 
 GPU flags download the matching ONNX Runtime build automatically.

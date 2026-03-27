@@ -147,6 +147,7 @@ fn ort_platform_info(
         OnnxExecutionProvider::Rocm => "-rocm",
         OnnxExecutionProvider::DirectMl => "-directml",
         OnnxExecutionProvider::CoreMl => "",
+        OnnxExecutionProvider::OpenVino => "-openvino",
     };
 
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
@@ -177,10 +178,11 @@ fn ort_platform_info(
     }
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     {
-        if !matches!(ep, OnnxExecutionProvider::Cpu | OnnxExecutionProvider::CoreMl) {
-            anyhow::bail!(
-                "Only CPU and CoreML execution providers are supported on macOS ARM"
-            );
+        if !matches!(
+            ep,
+            OnnxExecutionProvider::Cpu | OnnxExecutionProvider::CoreMl
+        ) {
+            anyhow::bail!("Only CPU and CoreML execution providers are supported on macOS ARM");
         }
         let base = format!("onnxruntime-osx-arm64-{ORT_VERSION}");
         Ok((
@@ -205,8 +207,11 @@ fn ort_platform_info(
     }
     #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
     {
-        if matches!(ep, OnnxExecutionProvider::Rocm) {
-            anyhow::bail!("ROCm is only supported on Linux");
+        if matches!(
+            ep,
+            OnnxExecutionProvider::Rocm | OnnxExecutionProvider::OpenVino
+        ) {
+            anyhow::bail!("ROCm and OpenVINO are only supported on Linux x86_64");
         }
         let base = format!("onnxruntime-win-x64{gpu_suffix}-{ORT_VERSION}");
         Ok((

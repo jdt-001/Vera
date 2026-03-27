@@ -8,7 +8,14 @@ use vera_core::config::InferenceBackend;
 use crate::helpers::load_runtime_config;
 
 /// Run the `vera update <path>` command.
-pub fn run(path: &str, json_output: bool, backend: InferenceBackend) -> anyhow::Result<()> {
+pub fn run(
+    path: &str,
+    json_output: bool,
+    backend: InferenceBackend,
+    exclude: Vec<String>,
+    no_ignore: bool,
+    no_default_excludes: bool,
+) -> anyhow::Result<()> {
     let repo_path = Path::new(path);
 
     if !repo_path.exists() {
@@ -29,6 +36,9 @@ pub fn run(path: &str, json_output: bool, backend: InferenceBackend) -> anyhow::
 
     let mut config = load_runtime_config()?;
     config.adjust_for_backend(backend);
+    config.indexing.extra_excludes = exclude;
+    config.indexing.no_ignore = no_ignore;
+    config.indexing.no_default_excludes = no_default_excludes;
 
     let (provider, model_name) = rt.block_on(vera_core::embedding::create_dynamic_provider(
         &config, backend,

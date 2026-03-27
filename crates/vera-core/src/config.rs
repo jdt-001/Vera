@@ -24,6 +24,15 @@ pub struct IndexingConfig {
     pub default_excludes: Vec<String>,
     /// Maximum file size in bytes to index (skip larger files).
     pub max_file_size_bytes: u64,
+    /// Extra exclusion globs from CLI `--exclude` flags.
+    #[serde(default)]
+    pub extra_excludes: Vec<String>,
+    /// Disable .gitignore and .veraignore parsing.
+    #[serde(default)]
+    pub no_ignore: bool,
+    /// Disable smart default exclusions.
+    #[serde(default)]
+    pub no_default_excludes: bool,
 }
 
 impl Default for IndexingConfig {
@@ -41,6 +50,9 @@ impl Default for IndexingConfig {
                 ".venv".to_string(),
             ],
             max_file_size_bytes: 1_000_000, // 1MB
+            extra_excludes: Vec::new(),
+            no_ignore: false,
+            no_default_excludes: false,
         }
     }
 }
@@ -112,6 +124,7 @@ pub enum OnnxExecutionProvider {
     Rocm,
     DirectMl,
     CoreMl,
+    OpenVino,
 }
 
 impl fmt::Display for OnnxExecutionProvider {
@@ -122,6 +135,7 @@ impl fmt::Display for OnnxExecutionProvider {
             Self::Rocm => write!(f, "rocm"),
             Self::DirectMl => write!(f, "directml"),
             Self::CoreMl => write!(f, "coreml"),
+            Self::OpenVino => write!(f, "openvino"),
         }
     }
 }
@@ -170,6 +184,7 @@ impl FromStr for InferenceBackend {
             "onnx-jina-rocm" => Ok(Self::OnnxJina(OnnxExecutionProvider::Rocm)),
             "onnx-jina-directml" => Ok(Self::OnnxJina(OnnxExecutionProvider::DirectMl)),
             "onnx-jina-coreml" => Ok(Self::OnnxJina(OnnxExecutionProvider::CoreMl)),
+            "onnx-jina-openvino" => Ok(Self::OnnxJina(OnnxExecutionProvider::OpenVino)),
             other => Err(format!("unknown backend: {other}")),
         }
     }
@@ -246,6 +261,17 @@ mod tests {
             deserialized.retrieval.default_limit,
             config.retrieval.default_limit
         );
+    }
+
+    #[test]
+    fn openvino_backend_round_trip() {
+        let backend = InferenceBackend::from_str("onnx-jina-openvino").unwrap();
+        assert_eq!(
+            backend,
+            InferenceBackend::OnnxJina(OnnxExecutionProvider::OpenVino)
+        );
+        assert_eq!(backend.to_string(), "onnx-jina-openvino");
+        assert!(backend.is_local());
     }
 
     #[test]

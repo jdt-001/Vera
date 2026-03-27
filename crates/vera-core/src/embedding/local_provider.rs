@@ -287,6 +287,12 @@ fn register_execution_provider(
             }
             result
         }
+        OnnxExecutionProvider::OpenVino => {
+            tracing::info!("registering OpenVINO execution provider");
+            builder.with_execution_providers([
+                ort::execution_providers::OpenVINOExecutionProvider::default().build(),
+            ])
+        }
     }
 }
 

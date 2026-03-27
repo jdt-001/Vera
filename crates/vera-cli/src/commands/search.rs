@@ -44,17 +44,29 @@ pub fn run(
 
     if timing {
         use std::io::Write;
+        use std::time::Duration;
         let stderr = std::io::stderr();
         let mut err = stderr.lock();
-        let fmt = |d: Option<std::time::Duration>| -> String {
+        let fmt = |d: Option<Duration>| -> String {
             match d {
                 Some(d) => format!("{}ms", d.as_millis()),
                 None => "n/a".to_string(),
             }
         };
-        let _ = writeln!(err, "[timing] search: {}", fmt(timings.reranking));
-        let _ = writeln!(err, "[timing] augmentation: {}", fmt(timings.augmentation));
-        let _ = writeln!(err, "[timing] total: {}", fmt(timings.total));
+        let stages: &[(&str, Option<Duration>)] = &[
+            ("embedding", timings.embedding),
+            ("bm25", timings.bm25),
+            ("vector", timings.vector),
+            ("fusion", timings.fusion),
+            ("reranking", timings.reranking),
+            ("augmentation", timings.augmentation),
+            ("total", timings.total),
+        ];
+        for (name, duration) in stages {
+            if duration.is_some() || *name == "total" {
+                let _ = writeln!(err, "[timing] {name}: {}", fmt(*duration));
+            }
+        }
     }
 
     Ok(())

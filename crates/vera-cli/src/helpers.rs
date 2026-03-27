@@ -14,6 +14,7 @@ pub fn resolve_backend_flags(
     onnx_jina_rocm: bool,
     onnx_jina_directml: bool,
     onnx_jina_coreml: bool,
+    onnx_jina_openvino: bool,
     local: bool,
 ) -> vera_core::config::InferenceBackend {
     use vera_core::config::{InferenceBackend, OnnxExecutionProvider};
@@ -27,6 +28,8 @@ pub fn resolve_backend_flags(
         Some(InferenceBackend::OnnxJina(OnnxExecutionProvider::DirectMl))
     } else if onnx_jina_coreml {
         Some(InferenceBackend::OnnxJina(OnnxExecutionProvider::CoreMl))
+    } else if onnx_jina_openvino {
+        Some(InferenceBackend::OnnxJina(OnnxExecutionProvider::OpenVino))
     } else {
         None
     };
@@ -63,14 +66,12 @@ impl<'a> CompactResult<'a> {
 /// Output search results.
 ///
 /// Priority: `--json` compact JSON > `--raw` verbose > default markdown codeblocks.
-pub fn output_results(
-    results: &[vera_core::types::SearchResult],
-    json_output: bool,
-    raw: bool,
-) {
+pub fn output_results(results: &[vera_core::types::SearchResult], json_output: bool, raw: bool) {
     if json_output {
-        let compact: Vec<CompactResult> =
-            results.iter().map(CompactResult::from_search_result).collect();
+        let compact: Vec<CompactResult> = results
+            .iter()
+            .map(CompactResult::from_search_result)
+            .collect();
         let json = serde_json::to_string(&compact)
             .unwrap_or_else(|e| format!("{{\"error\": \"failed to serialize: {e}\"}}"));
         println!("{json}");

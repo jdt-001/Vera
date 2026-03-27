@@ -76,23 +76,48 @@ pub fn discover_files(root: &Path, config: &IndexingConfig) -> Result<DiscoveryR
         .canonicalize()
         .with_context(|| format!("failed to resolve path: {}", root.display()))?;
 
+    // Determine ignore file strategy based on .veraignore presence.
+    let veraignore_path = root.join(".veraignore");
+    let (use_gitignore, use_veraignore) = if config.no_ignore {
+        (false, false)
+    } else if veraignore_path.exists() {
+        let content = std::fs::read_to_string(&veraignore_path)
+            .with_context(|| format!("failed to read {}", veraignore_path.display()))?;
+        let has_include = content.lines().any(|l| l.trim() == "#include .gitignore");
+        (has_include, true)
+    } else {
+        (true, false)
+    };
+
     let mut walker = WalkBuilder::new(&root);
     walker
-        .hidden(false) // Don't skip hidden files (we handle exclusions ourselves)
-        .git_ignore(true) // Respect .gitignore
-        .git_global(true) // Respect global gitignore
-        .git_exclude(true) // Respect .git/info/exclude
-        .require_git(false) // Walk even if not a git repo
-        .ignore(true); // Respect .ignore files
+        .hidden(false)
+        .git_ignore(use_gitignore)
+        .git_global(use_gitignore)
+        .git_exclude(use_gitignore)
+        .require_git(false)
+        .ignore(!config.no_ignore);
 
-    // Add default directory exclusions as overrides.
+    if use_veraignore {
+        walker.add_custom_ignore_filename(".veraignore");
+    }
+
+    // Add default directory exclusions and CLI --exclude patterns as overrides.
     let mut overrides = ignore::overrides::OverrideBuilder::new(&root);
-    for pattern in &config.default_excludes {
-        // The override format uses `!` prefix for exclusion globs.
-        let glob = format!("!{pattern}/");
+    if !config.no_default_excludes {
+        for pattern in &config.default_excludes {
+            let glob = format!("!{pattern}/");
+            overrides
+                .add(&glob)
+                .with_context(|| format!("invalid exclusion pattern: {pattern}"))?;
+        }
+        // Always exclude .veraignore itself from indexing.
+        overrides.add("!.veraignore")?;
+    }
+    for pattern in &config.extra_excludes {
         overrides
-            .add(&glob)
-            .with_context(|| format!("invalid exclusion pattern: {pattern}"))?;
+            .add(&format!("!{pattern}"))
+            .with_context(|| format!("invalid --exclude pattern: {pattern}"))?;
     }
     let overrides = overrides
         .build()
@@ -503,5 +528,174 @@ mod tests {
     fn handles_invalid_path() {
         let result = discover_files(Path::new("/nonexistent/path"), &default_config());
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn veraignore_overrides_gitignore() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("main.rs"), "fn main() {}").unwrap();
+        fs::write(dir.path().join("secret.txt"), "sensitive").unwrap();
+        fs::write(dir.path().join("notes.md"), "local notes").unwrap();
+        // .gitignore excludes secret.txt and notes.md
+        fs::write(dir.path().join(".gitignore"), "secret.txt\nnotes.md\n").unwrap();
+        // .veraignore only excludes secret.txt (notes.md should now be indexed)
+        fs::write(dir.path().join(".veraignore"), "secret.txt\n").unwrap();
+
+        let result = discover_files(dir.path(), &default_config()).unwrap();
+        let names: Vec<&str> = result
+            .files
+            .iter()
+            .map(|f| f.relative_path.as_str())
+            .collect();
+        assert!(names.contains(&"main.rs"));
+        assert!(
+            names.contains(&"notes.md"),
+            "notes.md should be indexed when .veraignore overrides .gitignore"
+        );
+        assert!(
+            !names.contains(&"secret.txt"),
+            "secret.txt should still be excluded by .veraignore"
+        );
+    }
+
+    #[test]
+    fn veraignore_include_gitignore_directive() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("main.rs"), "fn main() {}").unwrap();
+        fs::write(dir.path().join("secret.txt"), "sensitive").unwrap();
+        fs::write(dir.path().join("draft.md"), "draft notes").unwrap();
+        fs::write(dir.path().join(".gitignore"), "secret.txt\n").unwrap();
+        // .veraignore includes gitignore rules AND adds draft.md exclusion
+        fs::write(
+            dir.path().join(".veraignore"),
+            "#include .gitignore\ndraft.md\n",
+        )
+        .unwrap();
+
+        let result = discover_files(dir.path(), &default_config()).unwrap();
+        let names: Vec<&str> = result
+            .files
+            .iter()
+            .map(|f| f.relative_path.as_str())
+            .collect();
+        assert!(names.contains(&"main.rs"));
+        assert!(
+            !names.contains(&"secret.txt"),
+            "gitignore rules should apply via #include"
+        );
+        assert!(
+            !names.contains(&"draft.md"),
+            ".veraignore extra pattern should apply"
+        );
+    }
+
+    #[test]
+    fn no_veraignore_uses_gitignore() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("main.rs"), "fn main() {}").unwrap();
+        fs::write(dir.path().join("secret.txt"), "sensitive").unwrap();
+        fs::write(dir.path().join(".gitignore"), "secret.txt\n").unwrap();
+
+        let result = discover_files(dir.path(), &default_config()).unwrap();
+        let names: Vec<&str> = result
+            .files
+            .iter()
+            .map(|f| f.relative_path.as_str())
+            .collect();
+        assert!(names.contains(&"main.rs"));
+        assert!(
+            !names.contains(&"secret.txt"),
+            "gitignore should apply when no .veraignore"
+        );
+    }
+
+    #[test]
+    fn extra_excludes_from_cli() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("main.rs"), "fn main() {}").unwrap();
+        let vendor = dir.path().join("vendor");
+        fs::create_dir_all(&vendor).unwrap();
+        fs::write(vendor.join("dep.rs"), "fn dep() {}").unwrap();
+
+        let mut config = default_config();
+        config.extra_excludes = vec!["vendor/**".to_string()];
+
+        let result = discover_files(dir.path(), &config).unwrap();
+        let names: Vec<&str> = result
+            .files
+            .iter()
+            .map(|f| f.relative_path.as_str())
+            .collect();
+        assert!(names.contains(&"main.rs"));
+        assert!(
+            !names.iter().any(|n| n.starts_with("vendor")),
+            "--exclude should exclude vendor"
+        );
+    }
+
+    #[test]
+    fn no_ignore_disables_gitignore_and_veraignore() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("main.rs"), "fn main() {}").unwrap();
+        fs::write(dir.path().join("secret.txt"), "sensitive").unwrap();
+        fs::write(dir.path().join(".gitignore"), "secret.txt\n").unwrap();
+
+        let mut config = default_config();
+        config.no_ignore = true;
+
+        let result = discover_files(dir.path(), &config).unwrap();
+        let names: Vec<&str> = result
+            .files
+            .iter()
+            .map(|f| f.relative_path.as_str())
+            .collect();
+        assert!(names.contains(&"main.rs"));
+        assert!(
+            names.contains(&"secret.txt"),
+            "no_ignore should disable gitignore"
+        );
+    }
+
+    #[test]
+    fn no_default_excludes_disables_smart_defaults() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("main.rs"), "fn main() {}").unwrap();
+        let nm = dir.path().join("node_modules");
+        fs::create_dir_all(&nm).unwrap();
+        fs::write(nm.join("dep.js"), "module.exports = {}").unwrap();
+
+        let mut config = default_config();
+        config.no_default_excludes = true;
+
+        let result = discover_files(dir.path(), &config).unwrap();
+        let names: Vec<&str> = result
+            .files
+            .iter()
+            .map(|f| f.relative_path.as_str())
+            .collect();
+        assert!(names.contains(&"main.rs"));
+        assert!(
+            names.iter().any(|n| n.starts_with("node_modules")),
+            "no_default_excludes should allow node_modules"
+        );
+    }
+
+    #[test]
+    fn veraignore_itself_excluded_from_indexing() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("main.rs"), "fn main() {}").unwrap();
+        fs::write(dir.path().join(".veraignore"), "*.log\n").unwrap();
+
+        let result = discover_files(dir.path(), &default_config()).unwrap();
+        let names: Vec<&str> = result
+            .files
+            .iter()
+            .map(|f| f.relative_path.as_str())
+            .collect();
+        assert!(names.contains(&"main.rs"));
+        assert!(
+            !names.contains(&".veraignore"),
+            ".veraignore should not be indexed"
+        );
     }
 }

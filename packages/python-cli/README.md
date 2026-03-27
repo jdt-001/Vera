@@ -25,7 +25,7 @@ vera-ai search "authentication middleware"
 vera-ai index . --onnx-jina-cpu
 vera-ai search "error handling" --onnx-jina-cpu
 
-# GPU acceleration (NVIDIA/AMD/DirectML/CoreML)
+# GPU acceleration (NVIDIA/AMD/DirectML/CoreML/OpenVINO)
 vera-ai index . --onnx-jina-cuda
 ```
 

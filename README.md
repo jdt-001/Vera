@@ -117,7 +117,7 @@ Exposes `search_code`, `index_project`, `update_project`, and `get_stats` tools.
 docker run --rm -i -v $(pwd):/workspace ghcr.io/lemon07r/vera:cpu
 ```
 
-CPU, CUDA (NVIDIA), and ROCm (AMD) images available. See [docs/docker.md](docs/docker.md) for GPU flags and MCP client configuration.
+CPU, CUDA (NVIDIA), ROCm (AMD), and OpenVINO (Intel) images available. See [docs/docker.md](docs/docker.md) for GPU flags and MCP client configuration.
 
 </details>
 
@@ -194,6 +194,7 @@ vera setup --onnx-jina-cuda      # NVIDIA GPU (requires CUDA 12+ drivers)
 vera setup --onnx-jina-rocm      # AMD GPU (Linux, requires ROCm drivers)
 vera setup --onnx-jina-directml  # Any DirectX 12 GPU (Windows)
 vera setup --onnx-jina-coreml    # Apple Silicon (macOS, M1/M2/M3/M4)
+vera setup --onnx-jina-openvino  # Intel GPU/iGPU (Linux only, requires Intel compute runtime)
 ```
 
 Vera downloads the matching ONNX Runtime build automatically. The same flag works on `vera index` and `vera search` to override the configured backend per-command.
@@ -244,6 +245,21 @@ Update the index after code changes:
 vera update .
 ```
 
+### Excluding Files
+
+Vera respects `.gitignore` by default. For more control, create a `.veraignore` file in your project root using gitignore syntax. When present, `.veraignore` completely replaces `.gitignore` rules, giving you full control over what gets indexed (useful for indexing untracked local docs while excluding other files).
+
+To keep `.gitignore` rules and add extra exclusions on top, put `#include .gitignore` at the top of `.veraignore`.
+
+One-off exclusions without editing files:
+
+```bash
+vera index . --exclude "tests/**" --exclude "*.generated.ts"
+vera update . --exclude "vendor/**"
+```
+
+Power-user flags: `--no-ignore` disables all ignore file parsing, `--no-default-excludes` disables the built-in exclusions (node_modules, .git, target, etc.).
+
 Other useful commands:
 
 ```bash
@@ -274,7 +290,7 @@ pub fn authenticate(credentials: &Credentials) -> Result<Token> { ... }
 ```
 ````
 
-Use `--json` for compact single-line JSON (useful for programmatic consumption or piping to other tools), or `--raw` for verbose human-readable output with all fields. Use `--timing` to print pipeline step durations to stderr.
+Use `--json` for compact single-line JSON (useful for programmatic consumption or piping to other tools), or `--raw` for verbose human-readable output with all fields. Use `--timing` to print per-stage pipeline durations (embedding, BM25, vector, fusion, reranking) to stderr.
 
 ## Benchmark Snapshot
 

@@ -75,7 +75,7 @@ pub fn run(
     }
 
     if let Some(path) = index_path.as_deref() {
-        commands::index::execute(path, effective_backend)?;
+        commands::index::execute(path, effective_backend, Vec::new(), false, false)?;
     }
 
     let report = SetupReport {

@@ -14,9 +14,7 @@ use crate::chunk_text::file_name;
 use crate::config::{InferenceBackend, VeraConfig};
 use crate::retrieval::hybrid::compute_vector_candidates;
 use crate::retrieval::query_classifier::{classify_query, params_for_query_type};
-use crate::retrieval::ranking::{
-    RankingStage, apply_query_ranking, is_path_weighted_query,
-};
+use crate::retrieval::ranking::{RankingStage, apply_query_ranking, is_path_weighted_query};
 use crate::retrieval::{apply_filters, search_bm25, search_hybrid, search_hybrid_reranked};
 use crate::types::{Chunk, SearchFilters, SearchResult, SymbolType};
 
@@ -194,7 +192,6 @@ fn effective_rerank_candidates(base: usize, fetch_limit: usize, _query: &str) ->
     base.max(fetch_limit)
 }
 
-
 fn augment_exact_match_candidates(
     index_dir: &Path,
     query: &str,
@@ -270,7 +267,6 @@ fn augment_exact_match_candidates(
     Ok(apply_query_ranking(query, merged, stage))
 }
 
-
 fn extract_exact_filename(query: &str) -> Option<String> {
     query
         .split_whitespace()
@@ -306,7 +302,6 @@ fn looks_like_compound_identifier(token: &str) -> bool {
     token.contains('_') || token.contains("::") || token.chars().any(|ch| ch.is_ascii_uppercase())
 }
 
-
 fn query_mentions_implementation(query: &str) -> bool {
     let lower = query.to_ascii_lowercase();
     lower.contains("implement")
@@ -314,7 +309,6 @@ fn query_mentions_implementation(query: &str) -> bool {
         || lower.contains("mounted")
         || lower.contains("mounting")
 }
-
 
 fn exact_match_priority(query: &str, identifier_case: &str, chunk: &Chunk) -> (u8, u8, u8, u8) {
     let exact_case = u8::from(chunk.symbol_name.as_deref() != Some(identifier_case));
@@ -348,8 +342,6 @@ fn exact_match_priority(query: &str, identifier_case: &str, chunk: &Chunk) -> (u
     )
 }
 
-
-
 fn chunk_looks_like_impl(chunk: &Chunk) -> bool {
     chunk
         .symbol_name
@@ -377,7 +369,6 @@ fn chunk_is_public_symbol(chunk: &Chunk) -> bool {
         )
     }) == Some(true)
 }
-
 
 fn uppercase_identifier_query(identifier: &str) -> bool {
     identifier
@@ -496,7 +487,8 @@ mod tests {
         assert_eq!(effective_rerank_candidates(5, 10, "anything"), 10);
 
         // Vector candidates use query_params multiplier without inflation
-        let nl_params = params_for_query_type(crate::retrieval::query_classifier::QueryType::NaturalLanguage);
+        let nl_params =
+            params_for_query_type(crate::retrieval::query_classifier::QueryType::NaturalLanguage);
         let vc = effective_vector_candidates(10, nl_params, "some query");
         assert!(vc >= 50); // at least the minimum from compute_vector_candidates
     }
@@ -507,18 +499,16 @@ mod tests {
         let metadata_path = dir.path().join("metadata.db");
         let store = MetadataStore::open(&metadata_path).unwrap();
         store
-            .insert_chunks(&[
-                Chunk {
-                    id: "sink:0".to_string(),
-                    file_path: "crates/searcher/src/sink.rs".to_string(),
-                    line_start: 102,
-                    line_end: 223,
-                    content: "pub trait Sink {}".to_string(),
-                    language: Language::Rust,
-                    symbol_type: Some(SymbolType::Trait),
-                    symbol_name: Some("Sink".to_string()),
-                },
-            ])
+            .insert_chunks(&[Chunk {
+                id: "sink:0".to_string(),
+                file_path: "crates/searcher/src/sink.rs".to_string(),
+                line_start: 102,
+                line_end: 223,
+                content: "pub trait Sink {}".to_string(),
+                language: Language::Rust,
+                symbol_type: Some(SymbolType::Trait),
+                symbol_name: Some("Sink".to_string()),
+            }])
             .unwrap();
 
         let augmented = augment_exact_match_candidates(
@@ -580,7 +570,9 @@ mod tests {
             augment_exact_match_candidates(dir.path(), "Config", Vec::new(), RankingStage::Initial)
                 .unwrap();
 
-        assert_eq!(augmented[0].file_path, "crates/searcher/src/searcher/mod.rs");
+        assert_eq!(
+            augmented[0].file_path,
+            "crates/searcher/src/searcher/mod.rs"
+        );
     }
-
 }

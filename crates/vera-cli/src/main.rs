@@ -156,6 +156,9 @@ enum Commands {
         /// Use local Jina ONNX models with CoreML (Apple Silicon).
         #[arg(long = "onnx-jina-coreml", group = "backend")]
         onnx_jina_coreml: bool,
+        /// Use local Jina ONNX models with OpenVINO (Intel GPU/iGPU, Linux only).
+        #[arg(long = "onnx-jina-openvino", group = "backend")]
+        onnx_jina_openvino: bool,
         /// Alias for --onnx-jina-cpu (backwards compatibility).
         #[arg(long, group = "backend", hide = true)]
         local: bool,
@@ -224,9 +227,21 @@ enum Commands {
         /// Use local Jina ONNX models with CoreML (Apple Silicon).
         #[arg(long = "onnx-jina-coreml", group = "backend")]
         onnx_jina_coreml: bool,
+        /// Use local Jina ONNX models with OpenVINO (Intel GPU/iGPU, Linux only).
+        #[arg(long = "onnx-jina-openvino", group = "backend")]
+        onnx_jina_openvino: bool,
         /// Alias for --onnx-jina-cpu (backwards compatibility).
         #[arg(long, group = "backend", hide = true)]
         local: bool,
+        /// Exclude files matching this glob pattern (repeatable).
+        #[arg(long = "exclude")]
+        exclude: Vec<String>,
+        /// Disable .gitignore and .veraignore parsing.
+        #[arg(long)]
+        no_ignore: bool,
+        /// Disable smart default exclusions.
+        #[arg(long)]
+        no_default_excludes: bool,
     },
 
     /// Search the indexed codebase.
@@ -296,6 +311,9 @@ enum Commands {
         /// Use local Jina ONNX models with CoreML (Apple Silicon).
         #[arg(long = "onnx-jina-coreml", group = "backend")]
         onnx_jina_coreml: bool,
+        /// Use local Jina ONNX models with OpenVINO (Intel GPU/iGPU, Linux only).
+        #[arg(long = "onnx-jina-openvino", group = "backend")]
+        onnx_jina_openvino: bool,
         /// Alias for --onnx-jina-cpu (backwards compatibility).
         #[arg(long, group = "backend", hide = true)]
         local: bool,
@@ -338,9 +356,21 @@ enum Commands {
         /// Use local Jina ONNX models with CoreML (Apple Silicon).
         #[arg(long = "onnx-jina-coreml", group = "backend")]
         onnx_jina_coreml: bool,
+        /// Use local Jina ONNX models with OpenVINO (Intel GPU/iGPU, Linux only).
+        #[arg(long = "onnx-jina-openvino", group = "backend")]
+        onnx_jina_openvino: bool,
         /// Alias for --onnx-jina-cpu (backwards compatibility).
         #[arg(long, group = "backend", hide = true)]
         local: bool,
+        /// Exclude files matching this glob pattern (repeatable).
+        #[arg(long = "exclude")]
+        exclude: Vec<String>,
+        /// Disable .gitignore and .veraignore parsing.
+        #[arg(long)]
+        no_ignore: bool,
+        /// Disable smart default exclusions.
+        #[arg(long)]
+        no_default_excludes: bool,
     },
 
     /// Show index statistics.
@@ -441,6 +471,7 @@ fn main() {
             onnx_jina_rocm,
             onnx_jina_directml,
             onnx_jina_coreml,
+            onnx_jina_openvino,
             local,
             api,
             index,
@@ -454,6 +485,7 @@ fn main() {
                 || onnx_jina_rocm
                 || onnx_jina_directml
                 || onnx_jina_coreml
+                || onnx_jina_openvino
                 || local
             {
                 Some(helpers::resolve_backend_flags(
@@ -462,6 +494,7 @@ fn main() {
                     onnx_jina_rocm,
                     onnx_jina_directml,
                     onnx_jina_coreml,
+                    onnx_jina_openvino,
                     local,
                 ))
             } else {
@@ -484,7 +517,11 @@ fn main() {
             onnx_jina_rocm,
             onnx_jina_directml,
             onnx_jina_coreml,
+            onnx_jina_openvino,
             local,
+            exclude,
+            no_ignore,
+            no_default_excludes,
         } => {
             tracing::info!(path = %path, "indexing");
             let backend = helpers::resolve_backend_flags(
@@ -493,9 +530,17 @@ fn main() {
                 onnx_jina_rocm,
                 onnx_jina_directml,
                 onnx_jina_coreml,
+                onnx_jina_openvino,
                 local,
             );
-            commands::index::run(&path, cli.json, backend)
+            commands::index::run(
+                &path,
+                cli.json,
+                backend,
+                exclude,
+                no_ignore,
+                no_default_excludes,
+            )
         }
         Commands::Search {
             query,
@@ -508,6 +553,7 @@ fn main() {
             onnx_jina_rocm,
             onnx_jina_directml,
             onnx_jina_coreml,
+            onnx_jina_openvino,
             local,
         } => {
             tracing::info!(query = %query, "searching");
@@ -522,9 +568,12 @@ fn main() {
                 onnx_jina_rocm,
                 onnx_jina_directml,
                 onnx_jina_coreml,
+                onnx_jina_openvino,
                 local,
             );
-            commands::search::run(&query, limit, &filters, cli.json, cli.raw, cli.timing, backend)
+            commands::search::run(
+                &query, limit, &filters, cli.json, cli.raw, cli.timing, backend,
+            )
         }
         Commands::Update {
             path,
@@ -533,7 +582,11 @@ fn main() {
             onnx_jina_rocm,
             onnx_jina_directml,
             onnx_jina_coreml,
+            onnx_jina_openvino,
             local,
+            exclude,
+            no_ignore,
+            no_default_excludes,
         } => {
             tracing::info!(path = %path, "updating");
             let backend = helpers::resolve_backend_flags(
@@ -542,9 +595,17 @@ fn main() {
                 onnx_jina_rocm,
                 onnx_jina_directml,
                 onnx_jina_coreml,
+                onnx_jina_openvino,
                 local,
             );
-            commands::update::run(&path, cli.json, backend)
+            commands::update::run(
+                &path,
+                cli.json,
+                backend,
+                exclude,
+                no_ignore,
+                no_default_excludes,
+            )
         }
         Commands::Stats => {
             tracing::info!("showing stats");

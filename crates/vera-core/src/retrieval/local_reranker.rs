@@ -245,6 +245,9 @@ fn register_execution_provider(
         OnnxExecutionProvider::CoreMl => builder.with_execution_providers([
             ort::execution_providers::CoreMLExecutionProvider::default().build(),
         ]),
+        OnnxExecutionProvider::OpenVino => builder.with_execution_providers([
+            ort::execution_providers::OpenVINOExecutionProvider::default().build(),
+        ]),
     }
 }
 
