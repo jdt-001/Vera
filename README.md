@@ -52,7 +52,7 @@ vera search "authentication logic"
 
 **Higher accuracy, proven on real codebases.** Vera scores 0.80 nDCG@10 and 0.70 Recall@5 on a 17-task benchmark across `ripgrep`, `flask`, and `fastify`. The current 21-task suite scores even higher. See [Benchmark Snapshot](#benchmark-snapshot).
 
-**Token-efficient output.** Defaults to markdown codeblocks, cutting output size ~35-40% vs. JSON. Ships with skill files that teach AI agents how to write effective queries and when to reach for `rg` instead.
+**Token-efficient output.** Returns only the relevant chunks, not entire files. On a 20-query benchmark against its own codebase, Vera's output averages 67% fewer tokens than loading the full files containing the same results. Most queries see 75-95% reduction; only queries hitting small config files break even. Default markdown codeblock format cuts an additional ~35-40% vs JSON. Ships with skill files that teach AI agents how to write effective queries and when to reach for `rg` instead.
 
 ## Features
 
