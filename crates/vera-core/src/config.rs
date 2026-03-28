@@ -235,7 +235,10 @@ impl VeraConfig {
                     if self.embedding.gpu_mem_limit_mb == 0 {
                         self.embedding.gpu_mem_limit_mb = 1024;
                     }
-                    tracing::info!("low-vram mode: batch_size=1, gpu_mem_limit={}MB", self.embedding.gpu_mem_limit_mb);
+                    tracing::info!(
+                        "low-vram mode: batch_size=1, gpu_mem_limit={}MB",
+                        self.embedding.gpu_mem_limit_mb
+                    );
                     return;
                 }
 
@@ -262,7 +265,10 @@ impl VeraConfig {
                     if self.embedding.gpu_mem_limit_mb == 0 && vram < 8192 {
                         // Use 80% of available VRAM.
                         self.embedding.gpu_mem_limit_mb = (vram as f64 * 0.8) as u64;
-                        tracing::info!("auto-set gpu_mem_limit={}MB (80% of {vram}MB)", self.embedding.gpu_mem_limit_mb);
+                        tracing::info!(
+                            "auto-set gpu_mem_limit={}MB (80% of {vram}MB)",
+                            self.embedding.gpu_mem_limit_mb
+                        );
                     }
                 } else {
                     // Could not detect VRAM; use safe defaults.
@@ -314,7 +320,11 @@ fn detect_rocm_vram_mb() -> Option<u64> {
     // CSV output: header line then data. Look for free VRAM column.
     for line in stdout.lines().skip(1) {
         // Format varies; try to find a numeric MB value.
-        if let Some(val) = line.split(',').filter_map(|s| s.trim().parse::<u64>().ok()).next() {
+        if let Some(val) = line
+            .split(',')
+            .filter_map(|s| s.trim().parse::<u64>().ok())
+            .next()
+        {
             // rocm-smi reports bytes; convert to MB.
             return Some(val / (1024 * 1024));
         }

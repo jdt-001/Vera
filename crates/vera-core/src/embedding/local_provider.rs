@@ -24,7 +24,10 @@ impl LocalEmbeddingProvider {
         Self::new_with_ep_and_mem_limit(ep, 0).await
     }
 
-    pub async fn new_with_ep_and_mem_limit(ep: OnnxExecutionProvider, gpu_mem_limit_mb: u64) -> Result<Self, EmbeddingError> {
+    pub async fn new_with_ep_and_mem_limit(
+        ep: OnnxExecutionProvider,
+        gpu_mem_limit_mb: u64,
+    ) -> Result<Self, EmbeddingError> {
         let ort_path = crate::local_models::ensure_ort_library_for_ep(ep)
             .await
             .map_err(|e| EmbeddingError::ApiError {
@@ -244,7 +247,11 @@ fn load_tokenizer(tokenizer_path: std::path::PathBuf) -> Result<Tokenizer> {
     Ok(tokenizer)
 }
 
-fn build_session(ep: OnnxExecutionProvider, onnx_path: std::path::PathBuf, gpu_mem_limit_mb: u64) -> Result<Session> {
+fn build_session(
+    ep: OnnxExecutionProvider,
+    onnx_path: std::path::PathBuf,
+    gpu_mem_limit_mb: u64,
+) -> Result<Session> {
     let available = std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(1);

@@ -162,7 +162,10 @@ fn ort_platform_info(
         if matches!(ep, OnnxExecutionProvider::DirectMl) {
             anyhow::bail!("DirectML is only supported on Windows");
         }
-        if matches!(ep, OnnxExecutionProvider::OpenVino | OnnxExecutionProvider::Rocm) {
+        if matches!(
+            ep,
+            OnnxExecutionProvider::OpenVino | OnnxExecutionProvider::Rocm
+        ) {
             // These EPs are installed via pip wheels, not GitHub release archives.
             // Return a dummy value; `ensure_ort_library_for_ep` handles them separately.
             let base = format!("onnxruntime-linux-x64{gpu_suffix}-{ORT_VERSION}");
@@ -274,15 +277,17 @@ async fn try_pip_install_ort(ep: OnnxExecutionProvider, lib_dir: &std::path::Pat
     let venv_dir = vera_home.join("venv");
 
     // Find python3
-    let python = find_python3().context(
-        "python3 not found. Install Python 3.11+ to enable automatic ORT installation.",
-    )?;
+    let python = find_python3()
+        .context("python3 not found. Install Python 3.11+ to enable automatic ORT installation.")?;
 
     eprintln!("Installing {pkg} via pip (this may take a minute)...");
 
     // Create venv if it doesn't exist
     if !venv_dir.join("bin").join("python3").exists() {
-        eprintln!("  Creating virtual environment at {}...", venv_dir.display());
+        eprintln!(
+            "  Creating virtual environment at {}...",
+            venv_dir.display()
+        );
         let status = tokio::process::Command::new(&python)
             .args(["-m", "venv", &venv_dir.to_string_lossy()])
             .stdout(std::process::Stdio::null())
@@ -291,7 +296,10 @@ async fn try_pip_install_ort(ep: OnnxExecutionProvider, lib_dir: &std::path::Pat
             .await
             .context("failed to create venv")?;
         if !status.success() {
-            anyhow::bail!("failed to create virtual environment at {}", venv_dir.display());
+            anyhow::bail!(
+                "failed to create virtual environment at {}",
+                venv_dir.display()
+            );
         }
     }
 
@@ -376,9 +384,7 @@ async fn try_wheel_download_ort(
         .next()
         .context("no compatible Linux x86_64 wheel found on PyPI")?;
 
-    let version = body["info"]["version"]
-        .as_str()
-        .unwrap_or("unknown");
+    let version = body["info"]["version"].as_str().unwrap_or("unknown");
     eprintln!("  Downloading {pypi_name} v{version} wheel...");
     eprintln!("  {wheel_url}");
 
@@ -477,10 +483,7 @@ async fn copy_so_files_from_dir(
     let mut entries = fs::read_dir(src_dir).await?;
     while let Some(entry) = entries.next_entry().await? {
         let path = entry.path();
-        let filename = path
-            .file_name()
-            .and_then(|f| f.to_str())
-            .unwrap_or("");
+        let filename = path.file_name().and_then(|f| f.to_str()).unwrap_or("");
         if !filename.contains(".so") {
             continue;
         }
@@ -609,7 +612,10 @@ async fn ensure_ort_via_pip_chain(
     // Option 1: pip install into managed venv
     match try_pip_install_ort(ep, lib_dir).await {
         Ok(()) => {
-            eprintln!("ONNX Runtime ({ep}) installed via pip to {}", lib_dir.display());
+            eprintln!(
+                "ONNX Runtime ({ep}) installed via pip to {}",
+                lib_dir.display()
+            );
             return Ok(target_path.to_path_buf());
         }
         Err(e) => {
@@ -621,7 +627,10 @@ async fn ensure_ort_via_pip_chain(
     // Option 2: download wheel directly from PyPI
     match try_wheel_download_ort(ep, lib_dir).await {
         Ok(()) => {
-            eprintln!("ONNX Runtime ({ep}) installed via wheel to {}", lib_dir.display());
+            eprintln!(
+                "ONNX Runtime ({ep}) installed via wheel to {}",
+                lib_dir.display()
+            );
             return Ok(target_path.to_path_buf());
         }
         Err(e) => {

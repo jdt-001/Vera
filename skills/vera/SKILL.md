@@ -11,13 +11,15 @@ Semantic code search CLI. Combines BM25 keyword matching with vector similarity 
 
 1. Ensure Vera is installed and on `PATH` (add `.vera/` to `.gitignore` on first use). If missing: `references/install.md`.
 2. Index the repo: `vera index .` (first time) or `vera update .` (after edits).
-3. Search:
+3. Get oriented: `vera overview` returns a project summary (languages, directories, entry points, hotspots).
+4. Trace references: `vera references <symbol>` finds callers; add `--callees` to see what it calls. `vera dead-code` lists functions with no callers.
+5. Search:
    ```sh
    vera search "authentication middleware"
    vera search "parse_config" --type function --limit 5
    vera search "database connection" --lang rust --path "src/**"
    ```
-4. Use the first results (they are ranked by relevance). Output is markdown codeblocks by default.
+6. Use the first results (they are ranked by relevance). Output is markdown codeblocks by default.
 
 ## Example Output
 

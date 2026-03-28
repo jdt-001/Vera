@@ -8,6 +8,31 @@ use rusqlite::{Connection, params};
 
 use crate::types::{Chunk, Language, SymbolType};
 
+/// A call site where a symbol is called from.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CallerRef {
+    pub file_path: String,
+    pub line: u32,
+    pub caller: Option<String>,
+}
+
+/// A symbol called by another symbol.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CalleeRef {
+    pub file_path: String,
+    pub line: u32,
+    pub callee: String,
+}
+
+/// A symbol with no callers (potential dead code).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DeadSymbol {
+    pub symbol_name: String,
+    pub file_path: String,
+    pub line: u32,
+    pub symbol_type: Option<String>,
+}
+
 /// SQLite-backed metadata store for chunk attributes.
 pub struct MetadataStore {
     conn: Connection,
@@ -81,6 +106,24 @@ impl MetadataStore {
                 );",
             )
             .context("failed to create index_metadata table")?;
+
+        // Call-site references for call graph analysis.
+        self.conn
+            .execute_batch(
+                "CREATE TABLE IF NOT EXISTS [references] (
+                    file_path TEXT NOT NULL,
+                    line INTEGER NOT NULL,
+                    callee TEXT NOT NULL,
+                    caller TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_refs_callee
+                    ON [references](callee);
+                CREATE INDEX IF NOT EXISTS idx_refs_caller
+                    ON [references](caller);
+                CREATE INDEX IF NOT EXISTS idx_refs_file_path
+                    ON [references](file_path);",
+            )
+            .context("failed to create references table")?;
 
         Ok(())
     }
@@ -273,7 +316,7 @@ impl MetadataStore {
     pub fn clear(&self) -> Result<()> {
         self.conn
             .execute_batch(
-                "DELETE FROM chunks; DELETE FROM file_hashes; DELETE FROM index_metadata;",
+                "DELETE FROM chunks; DELETE FROM file_hashes; DELETE FROM index_metadata; DELETE FROM [references];",
             )
             .context("failed to clear metadata store")?;
         Ok(())
@@ -341,6 +384,135 @@ impl MetadataStore {
         Ok(())
     }
 
+    // ── Reference (call graph) operations ──────────────────────────
+
+    /// Insert a batch of call-site references for a single file.
+    pub fn insert_references(
+        &self,
+        file_path: &str,
+        refs: &[crate::parsing::references::RawReference],
+    ) -> Result<()> {
+        let tx = self
+            .conn
+            .unchecked_transaction()
+            .context("failed to begin reference transaction")?;
+        {
+            let mut stmt = self
+                .conn
+                .prepare_cached(
+                    "INSERT INTO [references] (file_path, line, callee, caller)
+                     VALUES (?1, ?2, ?3, ?4)",
+                )
+                .context("failed to prepare reference insert")?;
+            for r in refs {
+                stmt.execute(params![file_path, r.line, r.callee, r.caller])
+                    .context("failed to insert reference")?;
+            }
+        }
+        tx.commit().context("failed to commit reference inserts")?;
+        Ok(())
+    }
+
+    /// Delete all references for a given file.
+    pub fn delete_references_by_file(&self, file_path: &str) -> Result<()> {
+        self.conn
+            .execute(
+                "DELETE FROM [references] WHERE file_path = ?1",
+                params![file_path],
+            )
+            .context("failed to delete references by file")?;
+        Ok(())
+    }
+
+    /// Find all call sites that reference a given symbol name.
+    pub fn find_callers(&self, symbol_name: &str) -> Result<Vec<CallerRef>> {
+        let mut stmt = self
+            .conn
+            .prepare_cached(
+                "SELECT file_path, line, caller FROM [references]
+                 WHERE lower(callee) = lower(?1)
+                 ORDER BY file_path, line",
+            )
+            .context("failed to prepare callers query")?;
+        let rows = stmt
+            .query_map(params![symbol_name], |row| {
+                Ok(CallerRef {
+                    file_path: row.get(0)?,
+                    line: row.get(1)?,
+                    caller: row.get(2)?,
+                })
+            })
+            .context("failed to query callers")?;
+        let mut results = Vec::new();
+        for row in rows {
+            results.push(row.context("failed to read caller row")?);
+        }
+        Ok(results)
+    }
+
+    /// Find all symbols called by a given symbol name.
+    pub fn find_callees(&self, symbol_name: &str) -> Result<Vec<CalleeRef>> {
+        let mut stmt = self
+            .conn
+            .prepare_cached(
+                "SELECT file_path, line, callee FROM [references]
+                 WHERE lower(caller) = lower(?1)
+                 ORDER BY file_path, line",
+            )
+            .context("failed to prepare callees query")?;
+        let rows = stmt
+            .query_map(params![symbol_name], |row| {
+                Ok(CalleeRef {
+                    file_path: row.get(0)?,
+                    line: row.get(1)?,
+                    callee: row.get(2)?,
+                })
+            })
+            .context("failed to query callees")?;
+        let mut results = Vec::new();
+        for row in rows {
+            results.push(row.context("failed to read callee row")?);
+        }
+        Ok(results)
+    }
+
+    /// Find defined symbols that have zero callers (potential dead code).
+    ///
+    /// Returns symbol names and their definition locations. Excludes common
+    /// entry points (main, test functions, etc.).
+    pub fn find_dead_symbols(&self) -> Result<Vec<DeadSymbol>> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT c.symbol_name, c.file_path, c.line_start, c.symbol_type
+                 FROM chunks c
+                 WHERE c.symbol_name IS NOT NULL
+                   AND c.symbol_type IN ('function', 'method')
+                   AND lower(c.symbol_name) NOT IN ('main', 'new', 'default', 'drop', 'clone', 'fmt', 'from', 'into', 'deref', 'init', 'setup', 'teardown')
+                   AND NOT EXISTS (
+                       SELECT 1 FROM [references] r
+                       WHERE lower(r.callee) = lower(c.symbol_name)
+                   )
+                 ORDER BY c.file_path, c.line_start",
+            )
+            .context("failed to prepare dead symbols query")?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(DeadSymbol {
+                    symbol_name: row.get(0)?,
+                    file_path: row.get(1)?,
+                    line: row.get(2)?,
+                    symbol_type: row.get(3)?,
+                })
+            })
+            .context("failed to query dead symbols")?;
+        let mut results = Vec::new();
+        for row in rows {
+            results.push(row.context("failed to read dead symbol row")?);
+        }
+        Ok(results)
+    }
+
     /// Get distinct file paths in the index.
     pub fn indexed_files(&self) -> Result<Vec<String>> {
         let mut stmt = self
@@ -388,6 +560,145 @@ impl MetadataStore {
             stats.push((lang, count as u64));
         }
         Ok(stats)
+    }
+
+    /// Get language breakdown by file count (language -> file count).
+    pub fn language_file_counts(&self) -> Result<Vec<(String, u64)>> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT language, COUNT(DISTINCT file_path) FROM chunks
+                 GROUP BY language ORDER BY COUNT(DISTINCT file_path) DESC",
+            )
+            .context("failed to prepare language file counts query")?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })
+            .context("failed to query language file counts")?;
+        let mut stats = Vec::new();
+        for row in rows {
+            let (lang, count) = row.context("failed to read language file count")?;
+            stats.push((lang, count as u64));
+        }
+        Ok(stats)
+    }
+
+    /// Get top-level directories with file counts.
+    pub fn top_directories(&self, limit: usize) -> Result<Vec<(String, u64)>> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT
+                    CASE
+                        WHEN instr(file_path, '/') > 0
+                        THEN substr(file_path, 1, instr(file_path, '/') - 1)
+                        ELSE '.'
+                    END AS dir,
+                    COUNT(DISTINCT file_path)
+                 FROM chunks
+                 GROUP BY dir
+                 ORDER BY COUNT(DISTINCT file_path) DESC
+                 LIMIT ?1",
+            )
+            .context("failed to prepare top directories query")?;
+        let rows = stmt
+            .query_map(params![limit as i64], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })
+            .context("failed to query top directories")?;
+        let mut dirs = Vec::new();
+        for row in rows {
+            let (dir, count) = row.context("failed to read directory stat")?;
+            dirs.push((dir, count as u64));
+        }
+        Ok(dirs)
+    }
+
+    /// Get total lines of code across all chunks.
+    pub fn total_lines(&self) -> Result<u64> {
+        let count: i64 = self
+            .conn
+            .query_row(
+                "SELECT COALESCE(SUM(line_end - line_start + 1), 0) FROM chunks",
+                [],
+                |row| row.get(0),
+            )
+            .context("failed to count total lines")?;
+        Ok(count as u64)
+    }
+
+    /// Get symbol type breakdown (symbol_type -> count).
+    pub fn symbol_type_stats(&self) -> Result<Vec<(String, u64)>> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT symbol_type, COUNT(*) FROM chunks
+                 WHERE symbol_type IS NOT NULL
+                 GROUP BY symbol_type ORDER BY COUNT(*) DESC",
+            )
+            .context("failed to prepare symbol type stats query")?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })
+            .context("failed to query symbol type stats")?;
+        let mut stats = Vec::new();
+        for row in rows {
+            let (sym_type, count) = row.context("failed to read symbol type stat")?;
+            stats.push((sym_type, count as u64));
+        }
+        Ok(stats)
+    }
+
+    /// Get files with the most chunks (hotspots).
+    pub fn hotspot_files(&self, limit: usize) -> Result<Vec<(String, u64)>> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT file_path, COUNT(*) FROM chunks
+                 GROUP BY file_path ORDER BY COUNT(*) DESC LIMIT ?1",
+            )
+            .context("failed to prepare hotspot files query")?;
+        let rows = stmt
+            .query_map(params![limit as i64], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })
+            .context("failed to query hotspot files")?;
+        let mut files = Vec::new();
+        for row in rows {
+            let (path, count) = row.context("failed to read hotspot file")?;
+            files.push((path, count as u64));
+        }
+        Ok(files)
+    }
+
+    /// Find likely entry point files (main.*, index.*, app.*, etc.).
+    pub fn entry_points(&self) -> Result<Vec<String>> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT DISTINCT file_path FROM chunks
+                 WHERE file_path LIKE '%/main.%'
+                    OR file_path LIKE 'main.%'
+                    OR file_path LIKE '%/index.%'
+                    OR file_path LIKE '%/app.%'
+                    OR file_path LIKE 'app.%'
+                    OR file_path LIKE '%/lib.%'
+                    OR file_path LIKE 'lib.%'
+                    OR file_path LIKE '%/mod.%'
+                    OR file_path LIKE '%/server.%'
+                 ORDER BY file_path",
+            )
+            .context("failed to prepare entry points query")?;
+        let rows = stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .context("failed to query entry points")?;
+        let mut files = Vec::new();
+        for row in rows {
+            files.push(row.context("failed to read entry point")?);
+        }
+        Ok(files)
     }
 }
 

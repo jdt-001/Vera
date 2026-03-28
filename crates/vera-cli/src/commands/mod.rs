@@ -8,6 +8,8 @@ pub mod config;
 pub mod doctor;
 pub mod index;
 pub mod mcp;
+pub mod overview;
+pub mod references;
 pub mod repair;
 pub mod search;
 pub mod setup;

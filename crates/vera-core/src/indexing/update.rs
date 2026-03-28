@@ -255,6 +255,14 @@ pub async fn update_repository<P: EmbeddingProvider>(
                     Language::from_extension(ext)
                 });
 
+            // Extract call-site references.
+            let refs = parsing::parse_and_extract_references(content, language);
+            if !refs.is_empty() {
+                metadata_store
+                    .insert_references(rel_path, &refs)
+                    .context("failed to store references")?;
+            }
+
             match parsing::parse_and_chunk(content, rel_path, language, &config.indexing) {
                 Ok(chunks) => {
                     debug!(file = %rel_path, chunks = chunks.len(), "parsed file");
@@ -363,6 +371,9 @@ fn remove_file_from_index(
     bm25_index: &Bm25Index,
     file_path: &str,
 ) -> Result<()> {
+    metadata_store
+        .delete_references_by_file(file_path)
+        .context("failed to delete references for file")?;
     // Get chunk IDs for this file (needed for vector/BM25 deletion).
     let chunks = metadata_store
         .get_chunks_by_file(file_path)

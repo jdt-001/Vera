@@ -19,7 +19,14 @@ pub fn run(
     verbose: bool,
     low_vram: bool,
 ) -> anyhow::Result<()> {
-    let summary = execute(path, backend, exclude, no_ignore, no_default_excludes, low_vram)?;
+    let summary = execute(
+        path,
+        backend,
+        exclude,
+        no_ignore,
+        no_default_excludes,
+        low_vram,
+    )?;
 
     if json_output {
         let json = serde_json::to_string_pretty(&summary)

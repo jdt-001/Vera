@@ -15,6 +15,7 @@
 pub mod chunker;
 pub mod extractor;
 pub mod languages;
+pub mod references;
 
 use anyhow::{Context, Result};
 use tree_sitter::Parser;
@@ -42,6 +43,9 @@ pub fn parse_and_chunk(
     language: Language,
     config: &IndexingConfig,
 ) -> Result<Vec<Chunk>> {
+    if language == Language::Markdown {
+        return Ok(chunker::markdown_section_chunks(source, file_path));
+    }
     if language.prefers_file_chunking() {
         return Ok(chunker::whole_file_chunk(source, file_path, language));
     }
@@ -82,6 +86,29 @@ fn parse_with_treesitter(
     } else {
         Ok(chunks)
     }
+}
+
+/// Parse a source file and extract call-site references.
+///
+/// Only works for languages with tree-sitter grammars. Returns an empty
+/// vec for unsupported languages or parse failures.
+pub fn parse_and_extract_references(
+    source: &str,
+    language: Language,
+) -> Vec<references::RawReference> {
+    let grammar = match languages::tree_sitter_grammar(language) {
+        Some(g) => g,
+        None => return Vec::new(),
+    };
+    let mut parser = Parser::new();
+    if parser.set_language(&grammar).is_err() {
+        return Vec::new();
+    }
+    let tree = match parser.parse(source, None) {
+        Some(t) => t,
+        None => return Vec::new(),
+    };
+    references::extract_references(&tree, source.as_bytes(), language)
 }
 
 #[cfg(test)]

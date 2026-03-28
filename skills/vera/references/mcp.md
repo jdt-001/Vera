@@ -34,6 +34,10 @@ The server exposes:
 - `index_project`
 - `update_project`
 - `get_stats`
+- `get_overview`
+- `watch_project`
+- `find_references`
+- `find_dead_code`
 
 ## Guidance
 

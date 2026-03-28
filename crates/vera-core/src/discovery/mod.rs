@@ -168,7 +168,8 @@ pub fn discover_files(root: &Path, config: &IndexingConfig) -> Result<DiscoveryR
                 size,
                 config.max_file_size_bytes
             );
-            let rel = path.strip_prefix(&root)
+            let rel = path
+                .strip_prefix(&root)
                 .map(|r| r.to_string_lossy().to_string())
                 .unwrap_or_else(|_| path.to_string_lossy().to_string());
             large_skipped_paths.push((rel, size));

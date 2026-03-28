@@ -156,7 +156,10 @@ fn detect_gpu() -> InferenceBackend {
         .is_ok_and(|s| s.success())
         || (cfg!(target_os = "linux")
             && std::process::Command::new("sh")
-                .args(["-c", "grep -rql 0x10de /sys/class/drm/*/device/vendor 2>/dev/null"])
+                .args([
+                    "-c",
+                    "grep -rql 0x10de /sys/class/drm/*/device/vendor 2>/dev/null",
+                ])
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())
                 .status()
@@ -184,7 +187,10 @@ fn detect_gpu() -> InferenceBackend {
     // Intel OpenVINO: check for Intel GPU via vendor ID (0x8086) in sysfs
     if cfg!(target_os = "linux") && cfg!(target_arch = "x86_64") {
         let has_intel_gpu = std::process::Command::new("sh")
-            .args(["-c", "grep -rql 0x8086 /sys/class/drm/*/device/vendor 2>/dev/null"])
+            .args([
+                "-c",
+                "grep -rql 0x8086 /sys/class/drm/*/device/vendor 2>/dev/null",
+            ])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .status()

@@ -11,6 +11,58 @@ use serde::Serialize;
 use crate::indexing::index_dir;
 use crate::storage::metadata::MetadataStore;
 
+/// Architecture overview of an indexed repository.
+#[derive(Debug, Clone, Serialize)]
+pub struct ProjectOverview {
+    /// Total files in the index.
+    pub file_count: u64,
+    /// Total chunks (symbols/blocks).
+    pub chunk_count: u64,
+    /// Approximate total lines of code.
+    pub total_lines: u64,
+    /// Index size on disk.
+    pub index_size_human: String,
+    /// Languages with file counts, sorted by file count descending.
+    pub languages: Vec<LanguageOverview>,
+    /// Top-level directories with file counts.
+    pub top_directories: Vec<DirectoryStat>,
+    /// Symbol type breakdown (function, struct, class, etc.).
+    pub symbol_types: Vec<SymbolTypeStat>,
+    /// Likely entry point files (main.*, index.*, app.*, etc.).
+    pub entry_points: Vec<String>,
+    /// Files with the most chunks (complexity hotspots).
+    pub hotspots: Vec<HotspotFile>,
+}
+
+/// Language info for the overview.
+#[derive(Debug, Clone, Serialize)]
+pub struct LanguageOverview {
+    pub language: String,
+    pub files: u64,
+    pub chunks: u64,
+}
+
+/// A top-level directory with its file count.
+#[derive(Debug, Clone, Serialize)]
+pub struct DirectoryStat {
+    pub directory: String,
+    pub files: u64,
+}
+
+/// Symbol type with count.
+#[derive(Debug, Clone, Serialize)]
+pub struct SymbolTypeStat {
+    pub symbol_type: String,
+    pub count: u64,
+}
+
+/// A file identified as a complexity hotspot.
+#[derive(Debug, Clone, Serialize)]
+pub struct HotspotFile {
+    pub file_path: String,
+    pub chunks: u64,
+}
+
 /// Complete statistics about an indexed repository.
 #[derive(Debug, Clone, Serialize)]
 pub struct IndexStats {
@@ -100,6 +152,109 @@ pub fn collect_stats(repo_path: &Path) -> Result<IndexStats> {
         languages,
     })
 }
+
+/// Collect an architecture overview of the indexed repository.
+///
+/// Returns a high-level summary: languages, directories, entry points,
+/// symbol types, and complexity hotspots. Designed for agent onboarding.
+pub fn collect_overview(repo_path: &Path) -> Result<ProjectOverview> {
+    let idx_dir = index_dir(repo_path);
+
+    if !idx_dir.exists() {
+        anyhow::bail!(
+            "no index found at: {}\nRun `vera index <path>` first to create an index.",
+            idx_dir.display()
+        );
+    }
+
+    let metadata_path = idx_dir.join("metadata.db");
+    let store = MetadataStore::open(&metadata_path).context("failed to open metadata store")?;
+
+    let file_count = store.file_count()?;
+    let chunk_count = store.chunk_count()?;
+    let total_lines = store.total_lines()?;
+    let index_size_bytes = compute_dir_size(&idx_dir)?;
+    let index_size_human = format_bytes(index_size_bytes);
+
+    // Merge chunk stats and file counts by language.
+    let chunk_stats = store.language_stats()?;
+    let file_stats = store.language_file_counts()?;
+    let file_map: std::collections::HashMap<&str, u64> =
+        file_stats.iter().map(|(l, c)| (l.as_str(), *c)).collect();
+    let languages = chunk_stats
+        .iter()
+        .map(|(lang, chunks)| LanguageOverview {
+            language: lang.clone(),
+            files: file_map.get(lang.as_str()).copied().unwrap_or(0),
+            chunks: *chunks,
+        })
+        .collect();
+
+    let top_directories = store
+        .top_directories(15)?
+        .into_iter()
+        .map(|(directory, files)| DirectoryStat { directory, files })
+        .collect();
+
+    let symbol_types = store
+        .symbol_type_stats()?
+        .into_iter()
+        .map(|(symbol_type, count)| SymbolTypeStat { symbol_type, count })
+        .collect();
+
+    let entry_points = store.entry_points()?;
+
+    let hotspots = store
+        .hotspot_files(10)?
+        .into_iter()
+        .map(|(file_path, chunks)| HotspotFile { file_path, chunks })
+        .collect();
+
+    Ok(ProjectOverview {
+        file_count,
+        chunk_count,
+        total_lines,
+        index_size_human,
+        languages,
+        top_directories,
+        symbol_types,
+        entry_points,
+        hotspots,
+    })
+}
+
+// ── Call graph queries ───────────────────────────────────────────────
+
+pub use crate::storage::metadata::{CalleeRef, CallerRef, DeadSymbol};
+
+/// Open the metadata store for a repo, or error if no index exists.
+fn open_metadata(repo_path: &Path) -> Result<MetadataStore> {
+    let idx_dir = index_dir(repo_path);
+    if !idx_dir.exists() {
+        anyhow::bail!(
+            "no index found at: {}\nRun `vera index <path>` first.",
+            idx_dir.display()
+        );
+    }
+    MetadataStore::open(&idx_dir.join("metadata.db")).context("failed to open metadata store")
+}
+
+/// Find all call sites that reference a given symbol name.
+pub fn find_callers(repo_path: &Path, symbol: &str) -> Result<Vec<CallerRef>> {
+    open_metadata(repo_path)?.find_callers(symbol)
+}
+
+/// Find all symbols called by a given symbol.
+pub fn find_callees(repo_path: &Path, symbol: &str) -> Result<Vec<CalleeRef>> {
+    open_metadata(repo_path)?.find_callees(symbol)
+}
+
+/// Find defined symbols with zero callers (potential dead code).
+pub fn find_dead_symbols(repo_path: &Path) -> Result<Vec<DeadSymbol>> {
+    open_metadata(repo_path)?.find_dead_symbols()
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────
 
 /// Recursively compute the total size of files in a directory.
 fn compute_dir_size(dir: &Path) -> Result<u64> {

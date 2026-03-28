@@ -229,7 +229,7 @@ async function extractArchive(archivePath, destination) {
     runChecked("powershell", [
       "-NoProfile",
       "-Command",
-      "Expand-Archive",
+      "Import-Module Microsoft.PowerShell.Archive; Expand-Archive",
       "-LiteralPath",
       archivePath,
       "-DestinationPath",

@@ -83,7 +83,7 @@ Use `vera doctor` if anything goes wrong. It reports the saved and active backen
 vera mcp   # or: bunx @vera-ai/cli mcp / uvx vera-ai mcp
 ```
 
-Exposes `search_code`, `index_project`, `update_project`, and `get_stats` tools.
+Exposes `search_code`, `index_project`, `update_project`, `get_stats`, `get_overview`, `watch_project`, `find_references`, and `find_dead_code` tools.
 
 </details>
 
@@ -258,6 +258,10 @@ vera repair                    # re-fetch missing assets for current backend
 vera upgrade                   # inspect the binary update plan
 vera upgrade --apply           # run it when the install method is known
 vera stats                     # index statistics
+vera overview                  # project summary (languages, entry points, hotspots)
+vera references foo            # find all callers of symbol 'foo'
+vera references foo --callees  # find what 'foo' calls
+vera dead-code                 # find functions with no callers
 vera config                    # show current configuration
 vera agent install             # install skill files for AI agents
 vera agent status --scope all  # check skill installation status

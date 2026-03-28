@@ -354,6 +354,51 @@ enum Commands {
         no_default_excludes: bool,
     },
 
+    /// Show architecture overview of the indexed project.
+    ///
+    /// Returns a high-level summary: languages, directories, entry points,
+    /// symbol types, and complexity hotspots. Useful for onboarding.
+    ///
+    /// Examples:
+    ///   vera overview
+    ///   vera overview --json
+    #[command(long_about = "Show architecture overview of the indexed project.\n\n\
+                      Returns a high-level summary of the codebase: languages with file \n\
+                      and chunk counts, top-level directories, symbol type breakdown, \n\
+                      likely entry points, and complexity hotspots.\n\n\
+                      Useful for quick orientation when starting work on a new project.\n\n\
+                      Examples:\n  \
+                      vera overview             # Human-readable overview\n  \
+                      vera overview --json      # Machine-readable JSON output")]
+    Overview,
+
+    /// Find callers or callees of a symbol.
+    ///
+    /// Queries the call graph built during indexing to find where a symbol
+    /// is called from (callers) or what it calls (callees).
+    ///
+    /// Examples:
+    ///   vera references parse_and_chunk
+    ///   vera references parse_and_chunk --callees
+    ///   vera references parse_and_chunk --json
+    References {
+        /// Symbol name to look up.
+        symbol: String,
+        /// Show what this symbol calls instead of what calls it.
+        #[arg(long)]
+        callees: bool,
+    },
+
+    /// Find symbols with no callers (potential dead code).
+    ///
+    /// Scans the call graph for functions/methods that are never called.
+    /// Excludes common entry points (main, new, default, etc.).
+    ///
+    /// Examples:
+    ///   vera dead-code
+    ///   vera dead-code --json
+    DeadCode,
+
     /// Show index statistics.
     ///
     /// Displays file count, chunk count, index size on disk,
@@ -532,6 +577,18 @@ fn main() {
                 no_ignore,
                 no_default_excludes,
             )
+        }
+        Commands::Overview => {
+            tracing::info!("showing overview");
+            commands::overview::run(cli.json)
+        }
+        Commands::References { symbol, callees } => {
+            tracing::info!(symbol = %symbol, callees, "references query");
+            commands::references::run(&symbol, callees, cli.json)
+        }
+        Commands::DeadCode => {
+            tracing::info!("dead code analysis");
+            commands::references::run_dead_code(cli.json)
         }
         Commands::Stats => {
             tracing::info!("showing stats");

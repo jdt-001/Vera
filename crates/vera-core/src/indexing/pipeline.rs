@@ -17,6 +17,7 @@ use crate::discovery::{self, DiscoveryResult};
 use crate::embedding::{EmbeddingProvider, embed_chunks_concurrent};
 use crate::indexing::update::content_hash;
 use crate::parsing;
+use crate::parsing::references::RawReference;
 use crate::storage::bm25::{Bm25Document, Bm25Index};
 use crate::storage::metadata::MetadataStore;
 use crate::storage::vector::VectorStore;
@@ -138,7 +139,7 @@ pub async fn index_repository<P: EmbeddingProvider>(
     );
 
     // ── 3. Parse and chunk each file (parallelized with rayon) ──
-    let (all_chunks, parse_errors, file_hashes) =
+    let (all_chunks, parse_errors, file_hashes, all_refs) =
         parse_discovered_files_parallel(&discovery, config);
 
     info!(
@@ -186,8 +187,15 @@ pub async fn index_repository<P: EmbeddingProvider>(
 
     // ── 5. Store everything on disk ──────────────────────────────
     let idx_dir = index_dir(&repo_root);
-    store_index(&idx_dir, &all_chunks, &embeddings, &file_hashes, model_name)
-        .context("failed to write index artifacts")?;
+    store_index(
+        &idx_dir,
+        &all_chunks,
+        &embeddings,
+        &file_hashes,
+        &all_refs,
+        model_name,
+    )
+    .context("failed to write index artifacts")?;
 
     info!(index_dir = %idx_dir.display(), "index artifacts written");
 
@@ -214,92 +222,107 @@ pub async fn index_repository<P: EmbeddingProvider>(
 /// are collected and flattened. Files that fail parsing are recorded as
 /// errors but do not abort the pipeline. Also computes content hashes
 /// for incremental indexing support.
+#[allow(clippy::type_complexity)]
 fn parse_discovered_files_parallel(
     discovery: &DiscoveryResult,
     config: &VeraConfig,
-) -> (Vec<Chunk>, Vec<FileError>, Vec<(String, String)>) {
+) -> (
+    Vec<Chunk>,
+    Vec<FileError>,
+    Vec<(String, String)>,
+    Vec<(String, Vec<RawReference>)>,
+) {
     let config = Arc::new(config.clone());
 
-    // Process files in parallel: returns Ok((chunks, rel_path, hash)) or Err.
+    // Process files in parallel: returns Ok((chunks, rel_path, hash, refs)) or Err.
     #[allow(clippy::type_complexity)]
-    let results: Vec<Result<(Vec<Chunk>, String, String), FileError>> = discovery
-        .files
-        .par_iter()
-        .map(|file| {
-            let source = std::fs::read_to_string(&file.absolute_path).map_err(|err| {
-                warn!(
-                    file = %file.relative_path,
-                    error = %err,
-                    "failed to read file for parsing"
-                );
-                FileError {
-                    file_path: file.relative_path.clone(),
-                    error: err.to_string(),
-                }
-            })?;
-
-            let hash = content_hash(&source);
-
-            let language = file
-                .absolute_path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .and_then(Language::from_filename)
-                .unwrap_or_else(|| {
-                    let ext = file
-                        .absolute_path
-                        .extension()
-                        .and_then(|e| e.to_str())
-                        .unwrap_or("");
-                    Language::from_extension(ext)
-                });
-
-            parsing::parse_and_chunk(&source, &file.relative_path, language, &config.indexing)
-                .inspect(|chunks| {
-                    debug!(
-                        file = %file.relative_path,
-                        chunks = chunks.len(),
-                        "parsed file"
-                    );
-                })
-                .map(|chunks| (chunks, file.relative_path.clone(), hash))
-                .map_err(|err| {
+    let results: Vec<Result<(Vec<Chunk>, String, String, Vec<RawReference>), FileError>> =
+        discovery
+            .files
+            .par_iter()
+            .map(|file| {
+                let source = std::fs::read_to_string(&file.absolute_path).map_err(|err| {
                     warn!(
                         file = %file.relative_path,
                         error = %err,
-                        "parse error"
+                        "failed to read file for parsing"
                     );
                     FileError {
                         file_path: file.relative_path.clone(),
                         error: err.to_string(),
                     }
-                })
-        })
-        .collect();
+                })?;
 
-    // Flatten results into chunks, errors, and file hashes.
+                let hash = content_hash(&source);
+
+                let language = file
+                    .absolute_path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .and_then(Language::from_filename)
+                    .unwrap_or_else(|| {
+                        let ext = file
+                            .absolute_path
+                            .extension()
+                            .and_then(|e| e.to_str())
+                            .unwrap_or("");
+                        Language::from_extension(ext)
+                    });
+
+                let refs = parsing::parse_and_extract_references(&source, language);
+
+                parsing::parse_and_chunk(&source, &file.relative_path, language, &config.indexing)
+                    .inspect(|chunks| {
+                        debug!(
+                            file = %file.relative_path,
+                            chunks = chunks.len(),
+                            refs = refs.len(),
+                            "parsed file"
+                        );
+                    })
+                    .map(|chunks| (chunks, file.relative_path.clone(), hash, refs))
+                    .map_err(|err| {
+                        warn!(
+                            file = %file.relative_path,
+                            error = %err,
+                            "parse error"
+                        );
+                        FileError {
+                            file_path: file.relative_path.clone(),
+                            error: err.to_string(),
+                        }
+                    })
+            })
+            .collect();
+
+    // Flatten results into chunks, errors, file hashes, and references.
     let mut all_chunks = Vec::new();
     let mut parse_errors = Vec::new();
     let mut file_hashes = Vec::new();
+    let mut all_refs = Vec::new();
     for result in results {
         match result {
-            Ok((chunks, rel_path, hash)) => {
+            Ok((chunks, rel_path, hash, refs)) => {
                 all_chunks.extend(chunks);
+                if !refs.is_empty() {
+                    all_refs.push((rel_path.clone(), refs));
+                }
                 file_hashes.push((rel_path, hash));
             }
             Err(error) => parse_errors.push(error),
         }
     }
 
-    (all_chunks, parse_errors, file_hashes)
+    (all_chunks, parse_errors, file_hashes, all_refs)
 }
 
-/// Write chunks, embeddings, BM25 index, and file hashes to disk.
+/// Write chunks, embeddings, BM25 index, file hashes, and references to disk.
 fn store_index(
     idx_dir: &Path,
     chunks: &[Chunk],
     embeddings: &[(String, Vec<f32>)],
     file_hashes: &[(String, String)],
+    file_refs: &[(String, Vec<RawReference>)],
     model_name: &str,
 ) -> Result<()> {
     // Ensure index directory exists.
@@ -326,6 +349,13 @@ fn store_index(
         metadata_store
             .set_file_hash(file_path, hash)
             .context("failed to store file hash")?;
+    }
+
+    // Store call-site references for call graph analysis.
+    for (file_path, refs) in file_refs {
+        metadata_store
+            .insert_references(file_path, refs)
+            .context("failed to store references")?;
     }
 
     metadata_store

@@ -21,6 +21,18 @@ Single generic words return noise:
 
 Fix: describe what the code *does*, not what it *is*.
 
+## When To Use `vera references` Instead
+
+For structural queries about call relationships, use `references` or `dead-code` instead of `search`:
+
+```sh
+vera references parse_config            # who calls parse_config?
+vera references parse_config --callees  # what does parse_config call?
+vera dead-code                          # functions with no callers
+```
+
+These query the call graph built during indexing (direct calls only, no dynamic dispatch).
+
 ## When To Use `rg` Instead
 
 - Exact string: `rg "EMBEDDING_MODEL_BASE_URL"`

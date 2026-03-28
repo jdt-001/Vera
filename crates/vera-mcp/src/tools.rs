@@ -5,13 +5,19 @@
 //! - `index_project` — trigger full indexing
 //! - `update_project` — trigger incremental update
 //! - `get_stats` — retrieve index statistics
+//! - `get_overview` — architecture overview for agent onboarding
 
 use std::path::Path;
+use std::sync::Mutex;
 
 use serde::Serialize;
 use serde_json::Value;
 
 use crate::protocol::{ToolCallResult, ToolDefinition};
+use crate::watcher::WatchHandle;
+
+/// Global watcher handle. Kept alive for the lifetime of the MCP server process.
+static WATCHER: Mutex<Option<WatchHandle>> = Mutex::new(None);
 
 /// Compact result representation for MCP tool responses.
 /// Drops `score` and `language` (inferrable from extension), omits null fields.
@@ -128,6 +134,78 @@ pub fn tool_definitions() -> Vec<ToolDefinition> {
                 }
             }),
         },
+        ToolDefinition {
+            name: "get_overview".to_string(),
+            description: "Get architecture overview of the indexed project: languages, \
+                          directories, entry points, symbol types, and complexity hotspots. \
+                          Useful for onboarding and understanding project structure."
+                .to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path to the project directory (default: current dir)"
+                    }
+                }
+            }),
+        },
+        ToolDefinition {
+            name: "watch_project".to_string(),
+            description: "Start watching a project directory for file changes and \
+                          automatically update the index when files are modified. \
+                          Requires an existing index (run index_project first)."
+                .to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path to the project directory to watch (default: current dir)"
+                    }
+                }
+            }),
+        },
+        ToolDefinition {
+            name: "find_references".to_string(),
+            description: "Find callers or callees of a symbol using the call graph \
+                          built during indexing. Returns file paths and line numbers."
+                .to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "symbol": {
+                        "type": "string",
+                        "description": "Symbol name to look up (function or method name)"
+                    },
+                    "mode": {
+                        "type": "string",
+                        "enum": ["callers", "callees"],
+                        "description": "Whether to find callers (default) or callees"
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Path to the project directory (default: current dir)"
+                    }
+                },
+                "required": ["symbol"]
+            }),
+        },
+        ToolDefinition {
+            name: "find_dead_code".to_string(),
+            description: "Find functions and methods with no callers (potential dead code). \
+                          Excludes common entry points like main, new, default, etc."
+                .to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path to the project directory (default: current dir)"
+                    }
+                }
+            }),
+        },
     ]
 }
 
@@ -141,6 +219,10 @@ pub fn handle_tool_call(name: &str, arguments: &Value) -> ToolCallResult {
         "index_project" => handle_index_project(arguments),
         "update_project" => handle_update_project(arguments),
         "get_stats" => handle_get_stats(arguments),
+        "get_overview" => handle_get_overview(arguments),
+        "watch_project" => handle_watch_project(arguments),
+        "find_references" => handle_find_references(arguments),
+        "find_dead_code" => handle_find_dead_code(arguments),
         _ => ToolCallResult::error(format!("Unknown tool: {name}")),
     }
 }
@@ -203,37 +285,62 @@ fn handle_search_code(args: &Value) -> ToolCallResult {
     }
 }
 
-/// Handle the `index_project` tool.
-fn handle_index_project(args: &Value) -> ToolCallResult {
-    let path = match args.get("path").and_then(|v| v.as_str()) {
-        Some(p) => p,
-        None => return ToolCallResult::error("Missing required parameter: path"),
-    };
-
-    let repo_path = Path::new(path);
-    if !repo_path.exists() {
-        return ToolCallResult::error(format!("Path does not exist: {path}"));
+/// Validate a required path argument and return it as a Path reference.
+fn require_dir_path(args: &Value) -> Result<&Path, ToolCallResult> {
+    let path = args
+        .get("path")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| ToolCallResult::error("Missing required parameter: path"))?;
+    let p = Path::new(path);
+    if !p.exists() {
+        return Err(ToolCallResult::error(format!(
+            "Path does not exist: {path}"
+        )));
     }
-    if !repo_path.is_dir() {
-        return ToolCallResult::error(format!("Path is not a directory: {path}"));
+    if !p.is_dir() {
+        return Err(ToolCallResult::error(format!(
+            "Path is not a directory: {path}"
+        )));
     }
+    Ok(p)
+}
 
+/// Create a tokio runtime, resolve backend config, and build an embedding provider.
+fn create_runtime_and_provider() -> Result<
+    (
+        tokio::runtime::Runtime,
+        vera_core::embedding::DynamicProvider,
+        vera_core::config::VeraConfig,
+        String,
+    ),
+    ToolCallResult,
+> {
     let backend = vera_core::config::resolve_backend(None);
     let mut config = vera_core::config::VeraConfig::default();
     config.adjust_for_backend(backend);
 
-    let rt = match tokio::runtime::Runtime::new() {
-        Ok(r) => r,
-        Err(e) => return ToolCallResult::error(format!("Failed to create runtime: {e}")),
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| ToolCallResult::error(format!("Failed to create runtime: {e}")))?;
+
+    let (provider, model_name) = rt
+        .block_on(vera_core::embedding::create_dynamic_provider(
+            &config, backend,
+        ))
+        .map_err(|e| ToolCallResult::error(format!("Failed to create embedding provider: {e}")))?;
+
+    Ok((rt, provider, config, model_name))
+}
+
+/// Handle the `index_project` tool.
+fn handle_index_project(args: &Value) -> ToolCallResult {
+    let repo_path = match require_dir_path(args) {
+        Ok(p) => p,
+        Err(e) => return e,
     };
 
-    let (provider, model_name) = match rt.block_on(vera_core::embedding::create_dynamic_provider(
-        &config, backend,
-    )) {
-        Ok(res) => res,
-        Err(e) => {
-            return ToolCallResult::error(format!("Failed to create embedding provider: {e}"));
-        }
+    let (rt, provider, config, model_name) = match create_runtime_and_provider() {
+        Ok(t) => t,
+        Err(e) => return e,
     };
 
     match rt.block_on(vera_core::indexing::index_repository(
@@ -252,35 +359,14 @@ fn handle_index_project(args: &Value) -> ToolCallResult {
 
 /// Handle the `update_project` tool.
 fn handle_update_project(args: &Value) -> ToolCallResult {
-    let path = match args.get("path").and_then(|v| v.as_str()) {
-        Some(p) => p,
-        None => return ToolCallResult::error("Missing required parameter: path"),
+    let repo_path = match require_dir_path(args) {
+        Ok(p) => p,
+        Err(e) => return e,
     };
 
-    let repo_path = Path::new(path);
-    if !repo_path.exists() {
-        return ToolCallResult::error(format!("Path does not exist: {path}"));
-    }
-    if !repo_path.is_dir() {
-        return ToolCallResult::error(format!("Path is not a directory: {path}"));
-    }
-
-    let backend = vera_core::config::resolve_backend(None);
-    let mut config = vera_core::config::VeraConfig::default();
-    config.adjust_for_backend(backend);
-
-    let rt = match tokio::runtime::Runtime::new() {
-        Ok(r) => r,
-        Err(e) => return ToolCallResult::error(format!("Failed to create runtime: {e}")),
-    };
-
-    let (provider, model_name) = match rt.block_on(vera_core::embedding::create_dynamic_provider(
-        &config, backend,
-    )) {
-        Ok(res) => res,
-        Err(e) => {
-            return ToolCallResult::error(format!("Failed to create embedding provider: {e}"));
-        }
+    let (rt, provider, config, model_name) = match create_runtime_and_provider() {
+        Ok(t) => t,
+        Err(e) => return e,
     };
 
     match rt.block_on(vera_core::indexing::update_repository(
@@ -297,24 +383,48 @@ fn handle_update_project(args: &Value) -> ToolCallResult {
     }
 }
 
-/// Handle the `get_stats` tool.
-fn handle_get_stats(args: &Value) -> ToolCallResult {
-    let path = args.get("path").and_then(|v| v.as_str());
-
-    let repo_path = match path {
-        Some(p) => std::path::PathBuf::from(p),
-        None => match std::env::current_dir() {
-            Ok(d) => d,
-            Err(e) => {
-                return ToolCallResult::error(format!("Failed to get working directory: {e}"));
-            }
-        },
+/// Handle the `watch_project` tool.
+fn handle_watch_project(args: &Value) -> ToolCallResult {
+    let repo_path = match resolve_repo_path(args) {
+        Ok(p) => p,
+        Err(e) => return e,
     };
 
-    if !repo_path.exists() {
-        return ToolCallResult::error(format!("Path does not exist: {}", repo_path.display()));
+    match crate::watcher::start_watching(&repo_path) {
+        Ok(handle) => {
+            let mut guard = WATCHER.lock().unwrap();
+            *guard = Some(handle);
+            ToolCallResult::success(format!(
+                "Watching {} for changes. Index will auto-update when files are modified.",
+                repo_path.display()
+            ))
+        }
+        Err(e) => ToolCallResult::error(e),
     }
+}
 
+/// Resolve an optional path argument to a validated directory path.
+fn resolve_repo_path(args: &Value) -> Result<std::path::PathBuf, ToolCallResult> {
+    let repo_path = match args.get("path").and_then(|v| v.as_str()) {
+        Some(p) => std::path::PathBuf::from(p),
+        None => std::env::current_dir()
+            .map_err(|e| ToolCallResult::error(format!("Failed to get working directory: {e}")))?,
+    };
+    if !repo_path.exists() {
+        return Err(ToolCallResult::error(format!(
+            "Path does not exist: {}",
+            repo_path.display()
+        )));
+    }
+    Ok(repo_path)
+}
+
+/// Handle the `get_stats` tool.
+fn handle_get_stats(args: &Value) -> ToolCallResult {
+    let repo_path = match resolve_repo_path(args) {
+        Ok(p) => p,
+        Err(e) => return e,
+    };
     match vera_core::stats::collect_stats(&repo_path) {
         Ok(stats) => match serde_json::to_string_pretty(&stats) {
             Ok(json) => ToolCallResult::success(json),
@@ -324,20 +434,87 @@ fn handle_get_stats(args: &Value) -> ToolCallResult {
     }
 }
 
+/// Handle the `get_overview` tool.
+fn handle_get_overview(args: &Value) -> ToolCallResult {
+    let repo_path = match resolve_repo_path(args) {
+        Ok(p) => p,
+        Err(e) => return e,
+    };
+    match vera_core::stats::collect_overview(&repo_path) {
+        Ok(overview) => match serde_json::to_string_pretty(&overview) {
+            Ok(json) => ToolCallResult::success(json),
+            Err(e) => ToolCallResult::error(format!("Failed to serialize overview: {e}")),
+        },
+        Err(e) => ToolCallResult::error(format!("Failed to collect overview: {e}")),
+    }
+}
+
+/// Handle the `find_references` tool.
+fn handle_find_references(args: &Value) -> ToolCallResult {
+    let symbol = match args.get("symbol").and_then(|v| v.as_str()) {
+        Some(s) => s,
+        None => return ToolCallResult::error("Missing required parameter: symbol"),
+    };
+    let repo_path = match resolve_repo_path(args) {
+        Ok(p) => p,
+        Err(e) => return e,
+    };
+    let mode = args
+        .get("mode")
+        .and_then(|v| v.as_str())
+        .unwrap_or("callers");
+
+    match mode {
+        "callees" => match vera_core::stats::find_callees(&repo_path, symbol) {
+            Ok(results) => match serde_json::to_string(&results) {
+                Ok(json) => ToolCallResult::success(json),
+                Err(e) => ToolCallResult::error(format!("Failed to serialize: {e}")),
+            },
+            Err(e) => ToolCallResult::error(format!("Failed to find callees: {e}")),
+        },
+        _ => match vera_core::stats::find_callers(&repo_path, symbol) {
+            Ok(results) => match serde_json::to_string(&results) {
+                Ok(json) => ToolCallResult::success(json),
+                Err(e) => ToolCallResult::error(format!("Failed to serialize: {e}")),
+            },
+            Err(e) => ToolCallResult::error(format!("Failed to find callers: {e}")),
+        },
+    }
+}
+
+/// Handle the `find_dead_code` tool.
+fn handle_find_dead_code(args: &Value) -> ToolCallResult {
+    let repo_path = match resolve_repo_path(args) {
+        Ok(p) => p,
+        Err(e) => return e,
+    };
+    match vera_core::stats::find_dead_symbols(&repo_path) {
+        Ok(results) => match serde_json::to_string(&results) {
+            Ok(json) => ToolCallResult::success(json),
+            Err(e) => ToolCallResult::error(format!("Failed to serialize: {e}")),
+        },
+        Err(e) => ToolCallResult::error(format!("Failed to find dead code: {e}")),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn tool_definitions_has_four_tools() {
+    fn tool_definitions_has_eight_tools() {
         let tools = tool_definitions();
-        assert_eq!(tools.len(), 4);
+        assert_eq!(tools.len(), 8);
 
         let names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
         assert!(names.contains(&"search_code"));
         assert!(names.contains(&"index_project"));
         assert!(names.contains(&"update_project"));
         assert!(names.contains(&"get_stats"));
+        assert!(names.contains(&"get_overview"));
+        assert!(names.contains(&"watch_project"));
+        assert!(names.contains(&"find_references"));
+        assert!(names.contains(&"find_dead_code"));
     }
 
     #[test]

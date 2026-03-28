@@ -178,6 +178,85 @@ fn split_large_symbol(
     chunks
 }
 
+/// Split a markdown file into section-based chunks.
+///
+/// Each heading (# through ######) starts a new chunk. Content before the
+/// first heading becomes a chunk named after the file. This produces better
+/// search results than whole-file chunking because each section has a
+/// focused topic and heading as its symbol name.
+pub fn markdown_section_chunks(source: &str, file_path: &str) -> Vec<Chunk> {
+    if source.trim().is_empty() {
+        return Vec::new();
+    }
+
+    let lines: Vec<&str> = source.lines().collect();
+    let mut chunks = Vec::new();
+    let mut chunk_index: u32 = 0;
+
+    // Track current section
+    let mut section_start: usize = 0;
+    let mut section_name: Option<String> = None;
+
+    for (i, line) in lines.iter().enumerate() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with('#') {
+            // Extract heading text (strip leading #s and whitespace)
+            let heading = trimmed.trim_start_matches('#').trim();
+            if heading.is_empty() && !trimmed.contains(' ') {
+                // Not a real heading (e.g., just "###" with no text)
+                continue;
+            }
+
+            // Flush previous section
+            if i > section_start {
+                let content = join_lines(&lines, section_start as u32, (i - 1) as u32);
+                if !content.trim().is_empty() {
+                    let name = section_name
+                        .take()
+                        .unwrap_or_else(|| file_name(file_path).to_string());
+                    chunks.push(Chunk {
+                        id: format!("{file_path}:{chunk_index}"),
+                        file_path: file_path.to_string(),
+                        line_start: section_start as u32 + 1,
+                        line_end: i as u32,
+                        content,
+                        language: Language::Markdown,
+                        symbol_type: Some(SymbolType::Block),
+                        symbol_name: Some(name),
+                    });
+                    chunk_index += 1;
+                }
+            }
+
+            section_start = i;
+            section_name = Some(heading.to_string());
+        }
+    }
+
+    // Flush final section
+    let content = join_lines(&lines, section_start as u32, (lines.len() - 1) as u32);
+    if !content.trim().is_empty() {
+        let name = section_name.unwrap_or_else(|| file_name(file_path).to_string());
+        chunks.push(Chunk {
+            id: format!("{file_path}:{chunk_index}"),
+            file_path: file_path.to_string(),
+            line_start: section_start as u32 + 1,
+            line_end: lines.len() as u32,
+            content,
+            language: Language::Markdown,
+            symbol_type: Some(SymbolType::Block),
+            symbol_name: Some(name),
+        });
+    }
+
+    // If no headings found, fall back to single whole-file chunk
+    if chunks.is_empty() {
+        return whole_file_chunk(source, file_path, Language::Markdown);
+    }
+
+    chunks
+}
+
 /// Tier 0 fallback: sliding-window line-based chunking.
 ///
 /// Used for files with no tree-sitter grammar support. Produces overlapping
