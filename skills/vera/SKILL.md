@@ -11,22 +11,23 @@ Semantic code search CLI. Combines BM25 keyword matching with vector similarity 
 
 1. Ensure Vera is installed and on `PATH` (add `.vera/` to `.gitignore` on first use). If missing: `references/install.md`.
 2. Index the repo: `vera index .` (first time) or `vera update .` (after edits).
-3. Get oriented: `vera overview` returns a project summary (languages, directories, entry points, hotspots).
-4. Trace references: `vera references <symbol>` finds callers; add `--callees` to see what it calls. `vera dead-code` lists functions with no callers.
-5. Search:
+3. For long sessions, start the watcher to keep the index fresh automatically: `vera watch .` (runs in background until Ctrl-C). This replaces manual `vera update .` calls.
+4. Get oriented: `vera overview` returns a project summary (languages, directories, entry points, hotspots).
+5. Trace references: `vera references <symbol>` finds callers; add `--callees` to see what it calls. `vera dead-code` lists functions with no callers.
+6. Search:
    ```sh
    vera search "authentication middleware"
    vera search "parse_config" --type function --limit 5
    vera search "database connection" --lang rust --path "src/**"
    vera search "config loading" --deep    # multi-hop: follows symbols from initial results
    ```
-6. Regex search (exact patterns, imports, TODOs):
+7. Regex search (exact patterns, imports, TODOs):
    ```sh
    vera grep "fn\s+main"
    vera grep "TODO|FIXME" -i
    vera grep "use std::collections" --context 0
    ```
-7. Use the first results (they are ranked by relevance). Output is markdown codeblocks by default.
+8. Use the first results (they are ranked by relevance). Output is markdown codeblocks by default.
 
 ## Example Output
 
@@ -47,7 +48,7 @@ The info string contains `file_path:line_start-line_end` and optional `symbol_ty
 - Describe behavior or intent: "JWT token validation", "request rate limiting", not "code" or "utils".
 - For known symbol names, search the exact name: `vera search "parse_config"`.
 - Start broad, then narrow with `--lang`, `--path`, `--type`, `--limit`.
-- After code changes mid-session, run `vera update .` before searching again.
+- After code changes mid-session, run `vera update .` before searching again (or use `vera watch .` to auto-update).
 - Use `vera grep` for regex patterns scoped to indexed files (respects .gitignore/.veraignore).
 - Use `vera search --deep` when initial results need broader context (follows symbols from first results).
 - Use `rg` for bulk find-and-replace or searching outside the index.

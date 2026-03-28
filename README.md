@@ -252,6 +252,14 @@ See the [query guide](docs/query-guide.md) for tips on writing effective queries
 
 Update the index after code changes: `vera update .`
 
+For long sessions, start the file watcher to keep the index fresh automatically:
+
+```bash
+vera watch .
+```
+
+This watches for file changes and triggers incremental index updates (debounced at 2s). Runs until you press Ctrl-C.
+
 ### Excluding Files
 
 Vera respects `.gitignore` by default. For more control, create a `.veraignore` file in your project root (gitignore syntax). When present, `.veraignore` completely replaces `.gitignore` rules, giving you full control over what gets indexed.
@@ -294,6 +302,7 @@ vera doctor --probe --json     # machine-readable deep diagnostics
 vera repair                    # re-fetch missing assets for current backend
 vera upgrade                   # inspect the binary update plan
 vera upgrade --apply           # run it when the install method is known
+vera watch .                   # auto-update index on file changes (Ctrl-C to stop)
 vera stats                     # index statistics
 vera overview                  # project summary (languages, entry points, hotspots)
 vera references foo            # find all callers of symbol 'foo'

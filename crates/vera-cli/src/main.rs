@@ -473,6 +473,35 @@ enum Commands {
                       vera stats --json      # Machine-readable JSON output")]
     Stats,
 
+    /// Watch a project directory and auto-update the index on file changes.
+    ///
+    /// Starts a background file watcher that triggers incremental index updates
+    /// when source files change. Useful for long coding sessions where you want
+    /// the index to stay fresh without manual `vera update` calls.
+    ///
+    /// Requires an existing index (run `vera index <path>` first).
+    /// Blocks until interrupted with Ctrl-C.
+    ///
+    /// Examples:
+    ///   vera watch .
+    ///   vera watch /path/to/repo
+    #[command(
+        long_about = "Watch a project directory and auto-update the index on file changes.\n\n\
+                      Starts a background file watcher that triggers incremental index updates \n\
+                      when source files change. Changes are debounced (2s) to avoid redundant \n\
+                      updates during rapid edits.\n\n\
+                      Requires an existing index (run `vera index <path>` first). \n\
+                      Blocks until interrupted with Ctrl-C.\n\n\
+                      Examples:\n  \
+                      vera watch .                   # Watch current directory\n  \
+                      vera watch /path/to/repo       # Watch a specific repo\n  \
+                      vera watch . --json            # JSON status output"
+    )]
+    Watch {
+        /// Path to the directory to watch.
+        path: String,
+    },
+
     /// Show or set configuration values.
     ///
     /// Without arguments, shows the current configuration. Use subcommands
@@ -673,6 +702,10 @@ fn main() {
         Commands::Config { args } => {
             tracing::info!("config command");
             commands::config::run(&args, cli.json)
+        }
+        Commands::Watch { path } => {
+            tracing::info!(path = %path, "watching");
+            commands::watch::run(&path, cli.json)
         }
     };
 
@@ -903,6 +936,12 @@ mod tests {
     fn cli_parses_update_command() {
         let cli = Cli::parse_from(["vera", "update", "/tmp/repo"]);
         assert!(matches!(cli.command, Commands::Update { path, .. } if path == "/tmp/repo"));
+    }
+
+    #[test]
+    fn cli_parses_watch_command() {
+        let cli = Cli::parse_from(["vera", "watch", "/tmp/repo"]);
+        assert!(matches!(cli.command, Commands::Watch { path } if path == "/tmp/repo"));
     }
 
     #[test]
