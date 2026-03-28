@@ -28,7 +28,7 @@ use clap::{Parser, Subcommand};
                   results for direct CLI use and installable agent skills. Vera always keeps \
                   the index local in `.vera/`; `vera setup` only chooses the model backend.\n\n\
                   Quick start:\n  \
-                  vera agent install --scope project  # Optional: repo-local skill files\n  \
+                  vera agent install                   # Interactive: choose scope + agents\n  \
                   vera setup                          # Download built-in local models\n  \
                   vera index .                        # Index current directory\n  \
                   vera search \"auth\"                  # Search for authentication code\n  \
@@ -104,21 +104,25 @@ enum Commands {
                       `vera agent install` is idempotent: rerun it to refresh an \
                       existing skill install.\n\n\
                       Examples:\n  \
-                      vera agent install                       # Install globally for all supported clients\n  \
-                      vera agent install --scope project      # Install in the current repo only\n  \
-                      vera agent status --scope all           # Show project and global installs\n  \
-                      vera agent remove --client codex        # Remove the global Codex install"
+                      vera agent install                       # Interactive: choose scope and agents\n  \
+                      vera agent install --client claude       # Install for Claude Code (global)\n  \
+                      vera agent install --client all --scope project  # All agents, project only\n  \
+                      vera agent status                        # Show all install status\n  \
+                      vera agent remove                        # Interactive: pick installs to remove\n  \
+                      vera agent remove --client codex         # Remove the global Codex install"
     )]
     Agent {
         /// Agent command: install, status, or remove.
         #[arg(value_enum)]
         command: commands::agent::AgentCommand,
-        /// Which agent client to target.
-        #[arg(long, value_enum, default_value_t = commands::agent::AgentClient::All)]
-        client: commands::agent::AgentClient,
-        /// Install scope: global, project, or all.
-        #[arg(long, value_enum, default_value_t = commands::agent::AgentScope::Global)]
-        scope: commands::agent::AgentScope,
+        /// Which agent client to target. Without this flag, interactive mode
+        /// presents a checklist of all supported agents.
+        #[arg(long, value_enum)]
+        client: Option<commands::agent::AgentClient>,
+        /// Install scope: global, project, or all. Without this flag,
+        /// interactive mode prompts for scope selection.
+        #[arg(long, value_enum)]
+        scope: Option<commands::agent::AgentScope>,
     },
 
     /// Remove Vera: binary, models, config, agent skills, and PATH shim.
@@ -704,8 +708,8 @@ mod tests {
                 ..
             } => {
                 assert_eq!(command, commands::agent::AgentCommand::Install);
-                assert_eq!(client, commands::agent::AgentClient::Codex);
-                assert_eq!(scope, commands::agent::AgentScope::Global);
+                assert_eq!(client, Some(commands::agent::AgentClient::Codex));
+                assert_eq!(scope, None);
             }
             _ => panic!("expected Agent command"),
         }

@@ -1,7 +1,5 @@
 //! `vera setup` — persist a preferred Vera mode and bootstrap first-run state.
 
-use std::io::Write;
-
 use anyhow::{Context, bail};
 use serde::Serialize;
 use vera_core::config::{InferenceBackend, OnnxExecutionProvider};
@@ -240,10 +238,10 @@ fn detect_gpu() -> InferenceBackend {
     InferenceBackend::OnnxJina(OnnxExecutionProvider::Cpu)
 }
 
-/// Show an interactive backend selection menu. Auto-detect is the default (press Enter).
+/// Show an interactive backend selection menu. Auto-detect is the default.
 fn prompt_backend() -> anyhow::Result<InferenceBackend> {
     let detected = detect_gpu();
-    let detected_label = match detected {
+    let detected_hint = match detected {
         InferenceBackend::OnnxJina(OnnxExecutionProvider::Cuda) => "NVIDIA GPU detected",
         InferenceBackend::OnnxJina(OnnxExecutionProvider::CoreMl) => "Apple Silicon detected",
         InferenceBackend::OnnxJina(OnnxExecutionProvider::Rocm) => "AMD GPU detected",
@@ -252,37 +250,52 @@ fn prompt_backend() -> anyhow::Result<InferenceBackend> {
         _ => "no GPU detected, will use CPU",
     };
 
-    println!("No backend specified. Select a backend:\n");
-    println!("  [1] Auto-detect ({detected_label} -> {detected})  [default]");
-    println!("  [2] API mode         (remote OpenAI-compatible endpoints)");
-    println!("  [3] CUDA             (NVIDIA GPU)");
-    println!("  [4] ROCm             (AMD GPU, Linux)");
-    println!("  [5] CoreML           (Apple Silicon, macOS)");
-    println!("  [6] OpenVINO         (Intel GPU/iGPU, Linux)");
-    println!("  [7] DirectML         (DirectX 12 GPU, Windows)");
-    println!("  [8] CPU              (slow, not recommended)");
-    println!();
-    print!("Choice [1]: ");
-    std::io::stdout()
-        .flush()
-        .context("failed to flush prompt")?;
+    cliclack::intro("vera setup")?;
 
-    let mut input = String::new();
-    std::io::stdin()
-        .read_line(&mut input)
-        .context("failed to read input")?;
+    let backend: InferenceBackend = cliclack::select("Select a backend")
+        .item(
+            detected,
+            format!("Auto-detect ({detected_hint})"),
+            "recommended",
+        )
+        .item(
+            InferenceBackend::Api,
+            "API mode",
+            "remote OpenAI-compatible endpoints",
+        )
+        .item(
+            InferenceBackend::OnnxJina(OnnxExecutionProvider::Cuda),
+            "CUDA",
+            "NVIDIA GPU",
+        )
+        .item(
+            InferenceBackend::OnnxJina(OnnxExecutionProvider::Rocm),
+            "ROCm",
+            "AMD GPU, Linux",
+        )
+        .item(
+            InferenceBackend::OnnxJina(OnnxExecutionProvider::CoreMl),
+            "CoreML",
+            "Apple Silicon, macOS",
+        )
+        .item(
+            InferenceBackend::OnnxJina(OnnxExecutionProvider::OpenVino),
+            "OpenVINO",
+            "Intel GPU/iGPU, Linux",
+        )
+        .item(
+            InferenceBackend::OnnxJina(OnnxExecutionProvider::DirectMl),
+            "DirectML",
+            "DirectX 12 GPU, Windows",
+        )
+        .item(
+            InferenceBackend::OnnxJina(OnnxExecutionProvider::Cpu),
+            "CPU",
+            "slow, not recommended",
+        )
+        .interact()?;
 
-    match input.trim() {
-        "" | "1" => Ok(detected),
-        "2" => Ok(InferenceBackend::Api),
-        "3" => Ok(InferenceBackend::OnnxJina(OnnxExecutionProvider::Cuda)),
-        "4" => Ok(InferenceBackend::OnnxJina(OnnxExecutionProvider::Rocm)),
-        "5" => Ok(InferenceBackend::OnnxJina(OnnxExecutionProvider::CoreMl)),
-        "6" => Ok(InferenceBackend::OnnxJina(OnnxExecutionProvider::OpenVino)),
-        "7" => Ok(InferenceBackend::OnnxJina(OnnxExecutionProvider::DirectMl)),
-        "8" => Ok(InferenceBackend::OnnxJina(OnnxExecutionProvider::Cpu)),
-        other => bail!("invalid choice: {other}. Run `vera setup` again."),
-    }
+    Ok(backend)
 }
 
 fn resolve_local_embedding_model(
@@ -336,22 +349,16 @@ fn confirm(
     local_embedding_model: Option<&LocalEmbeddingModelConfig>,
     index_path: Option<&str>,
 ) -> anyhow::Result<bool> {
-    println!("This will configure Vera for {backend} mode.");
+    let mut msg = format!("Configure Vera for {backend} mode");
     if let Some(model) = local_embedding_model {
-        println!("Local embedding model: {}", model.display_name());
+        msg.push_str(&format!(", embedding model: {}", model.display_name()));
     }
     if let Some(path) = index_path {
-        println!("It will also index: {path}");
+        msg.push_str(&format!(", then index: {path}"));
     }
-    print!("Continue? [y/N]: ");
-    let mut stdout = std::io::stdout();
-    std::io::Write::flush(&mut stdout).context("failed to flush confirmation prompt")?;
-
-    let mut input = String::new();
-    std::io::stdin()
-        .read_line(&mut input)
-        .context("failed to read confirmation input")?;
-    Ok(matches!(input.trim(), "y" | "Y" | "yes" | "YES"))
+    msg.push('?');
+    let yes: bool = cliclack::confirm(msg).interact()?;
+    Ok(yes)
 }
 
 fn read_required_api_env(

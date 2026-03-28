@@ -38,13 +38,20 @@ Optional reranker: set `RERANKER_MODEL_BASE_URL`, `RERANKER_MODEL_ID`, `RERANKER
 
 ## Skill Management
 
+Running `vera agent install` with no flags opens an interactive prompt where you choose the install scope (global, project, or both) and select which agents to install for from a checklist.
+
 ```sh
-vera agent install                    # install/refresh skill
-vera agent install --client codex     # target a specific client
-vera agent install --scope project    # project-scoped install
-vera agent status --scope all         # check install status
-vera agent remove --client claude     # remove from a client
+vera agent install                              # interactive: choose scope + agents
+vera agent install --client claude              # non-interactive: Claude Code, global
+vera agent install --client all --scope project # all agents, project only
+vera agent status                               # check install status everywhere
+vera agent remove                               # interactive: pick installs to remove
+vera agent remove --client codex                # non-interactive: remove Codex global
 ```
+
+Supported clients: `agents` (universal), `amp`, `antigravity`, `augment`, `claude`, `cline`, `codebuff`, `codebuddy`, `codex`, `copilot`, `cortex`, `crush`, `cursor`, `droid`, `gemini`, `goose`, `iflow`, `junie`, `kilo`, `kimi`, `kiro`, `mux`, `opencode`, `openhands`, `pi`, `qwen`, `roo`, `trae`, `vibe`, `windsurf`, `zed`.
+
+The `agents` client writes to the cross-agent `.agents/skills/` directory, which is the open Agent Skills spec supported by most modern coding agents.
 
 ## Diagnostics
 

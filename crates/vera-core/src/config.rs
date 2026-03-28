@@ -355,9 +355,7 @@ pub fn resolve_backend(backend: Option<InferenceBackend>) -> InferenceBackend {
 /// normalises both names by stripping everything up to and including
 /// the last `/` and then comparing case-insensitively.
 pub fn model_names_match(a: &str, b: &str) -> bool {
-    let norm = |s: &str| {
-        s.rsplit('/').next().unwrap_or(s).to_ascii_lowercase()
-    };
+    let norm = |s: &str| s.rsplit('/').next().unwrap_or(s).to_ascii_lowercase();
     norm(a) == norm(b)
 }
 
@@ -461,7 +459,10 @@ mod tests {
 
     #[test]
     fn model_names_match_exact() {
-        assert!(model_names_match("jina-embeddings-v5", "jina-embeddings-v5"));
+        assert!(model_names_match(
+            "jina-embeddings-v5",
+            "jina-embeddings-v5"
+        ));
     }
 
     #[test]
@@ -474,7 +475,10 @@ mod tests {
 
     #[test]
     fn model_names_match_case_insensitive() {
-        assert!(model_names_match("Jina-Embeddings-V5", "jina-embeddings-v5"));
+        assert!(model_names_match(
+            "Jina-Embeddings-V5",
+            "jina-embeddings-v5"
+        ));
     }
 
     #[test]

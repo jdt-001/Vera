@@ -71,14 +71,14 @@ bunx @vera-ai/cli install   # or: npx -y @vera-ai/cli install / uvx vera-ai inst
 This downloads the `vera` binary, writes a `vera` shim into a user bin directory, and installs the global agent skill files. If that bin directory is not already on `PATH`, Vera tells you what to add. After that, `vera` is a standalone command. You don't need `bunx`/`npx`/`uvx` again.
 
 ```bash
-vera agent install --scope project  # optional: write repo-local skill files for your agent
+vera agent install                   # interactive: choose scope + agents
 vera setup                          # interactive backend menu (auto-detects your GPU)
 vera index .                        # index the current project (creates .vera/ in project root)
 vera search "query"                 # search (each project gets its own index)
 vera update .                       # after code changes
 ```
 
-`vera setup` with no flags shows a backend picker and auto-detects your GPU. You can also skip the menu: `vera setup --onnx-jina-cuda` (NVIDIA), `--onnx-jina-coreml` (Apple Silicon), `--api` (remote endpoints), etc. Add `--code-rank-embed` if you want the optional CodeRankEmbed local embedding preset. `vera setup` does not install skill files; use `vera agent install` for that. Run `vera setup --help` for all options.
+`vera setup` with no flags shows a backend picker and auto-detects your GPU. You can also skip the menu: `vera setup --onnx-jina-cuda` (NVIDIA), `--onnx-jina-coreml` (Apple Silicon), `--api` (remote endpoints), etc. Add `--code-rank-embed` if you want the optional CodeRankEmbed local embedding preset. `vera setup` does not install skill files; use `vera agent install` for that (with no flags it opens an interactive prompt to choose scope and agents). Run `vera setup --help` for all options.
 
 Use `vera doctor` if anything goes wrong. It reports the saved and active backend, installed Vera version, and checks GitHub for newer releases. Add `--probe` for a deeper read-only ONNX session check that does not download or repair missing assets. Use `vera repair` to re-fetch missing local assets or re-save API config from the current environment. Use `vera upgrade` to inspect or apply the binary update plan.
 
@@ -114,7 +114,7 @@ Download from [GitHub Releases](https://github.com/lemon07r/Vera/releases) for L
 ```bash
 curl -sL https://github.com/lemon07r/Vera/releases/latest/download/vera-x86_64-unknown-linux-gnu.tar.gz | tar xz
 cp vera-x86_64-unknown-linux-gnu/vera ~/.local/bin/
-vera agent install && vera setup
+vera agent install --client all && vera setup
 ```
 
 </details>
@@ -128,7 +128,7 @@ Rust 1.85+ required.
 git clone https://github.com/lemon07r/Vera.git && cd Vera
 cargo build --release
 cp target/release/vera ~/.local/bin/
-vera agent install && vera setup
+vera agent install --client all && vera setup
 ```
 
 </details>
@@ -300,8 +300,10 @@ vera references foo            # find all callers of symbol 'foo'
 vera references foo --callees  # find what 'foo' calls
 vera dead-code                 # find functions with no callers
 vera config                    # show current configuration
-vera agent install             # install skill files for AI agents
-vera agent status --scope all  # check skill installation status
+vera agent install             # interactive: choose scope + agents
+vera agent install --client all  # non-interactive: all agents, global
+vera agent status              # check skill installation status
+vera agent remove              # interactive: pick installs to remove
 ```
 
 ### Uninstalling

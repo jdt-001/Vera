@@ -12,13 +12,13 @@ Current benchmark snapshot: on Vera's local 21-task, 4-repo release benchmark, `
 pip install vera-ai
 ```
 
-`vera-ai setup` only configures the backend. Run `vera-ai agent install --scope project` inside a repo if you want repo-local skill files for your agent.
+`vera-ai setup` only configures the backend. Run `vera-ai agent install` to set up skill files for your agents (interactive by default, or pass `--client` and `--scope` for non-interactive use).
 
 ## Usage
 
 ```bash
-# Optional: write repo-local skill files for your agent
-vera-ai agent install --scope project
+# Optional: install skill files for your agents
+vera-ai agent install
 
 # Index a project
 vera-ai index .

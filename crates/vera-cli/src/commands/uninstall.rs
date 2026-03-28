@@ -48,8 +48,8 @@ pub fn run(json_output: bool) -> Result<()> {
     // 1. Remove agent skill files (all clients, all scopes).
     if let Err(e) = agent::run(
         agent::AgentCommand::Remove,
-        agent::AgentClient::All,
-        agent::AgentScope::All,
+        Some(agent::AgentClient::All),
+        Some(agent::AgentScope::All),
         json_output,
     ) {
         tracing::warn!("failed to remove agent skills: {e:#}");
