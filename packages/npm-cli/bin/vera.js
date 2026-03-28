@@ -67,7 +67,12 @@ function installMetadataPath() {
 }
 
 function currentInstallMethod() {
-  return process.versions.bun ? "bun" : "npm";
+  if (process.versions.bun) return "bun";
+  const ua = process.env.npm_config_user_agent || "";
+  if (ua.startsWith("bun/")) return "bun";
+  const execpath = process.env.npm_execpath || "";
+  if (execpath.includes("bun")) return "bun";
+  return "npm";
 }
 
 async function readInstallMetadata() {
