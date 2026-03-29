@@ -347,8 +347,8 @@ pub fn binary_version_status(force_refresh: bool) -> BinaryVersionStatus {
 
 pub fn suggested_update_command(install_method: Option<&str>) -> String {
     match install_method {
-        Some("npm") => "npm update -g @vera-ai/cli && npx @vera-ai/cli install".to_string(),
-        Some("bun") => "bun update -g @vera-ai/cli && bunx @vera-ai/cli install".to_string(),
+        Some("npm") => "npm install -g @vera-ai/cli@latest && npx @vera-ai/cli install".to_string(),
+        Some("bun") => "bun install -g @vera-ai/cli@latest && bunx @vera-ai/cli install".to_string(),
         Some("pip") => "pip install --upgrade vera-ai && vera-ai install".to_string(),
         Some("uv") => "uvx vera-ai install".to_string(),
         _ => "vera upgrade".to_string(),
@@ -475,11 +475,11 @@ pub fn supported_update_methods() -> &'static [&'static str] {
 pub fn apply_update(method: &str) -> Result<()> {
     match method {
         "npm" => {
-            run_update_step("npm", &["update", "-g", "@vera-ai/cli"])?;
+            run_update_step("npm", &["install", "-g", "@vera-ai/cli@latest"])?;
             run_update_step("npx", &["@vera-ai/cli", "install"])?;
         }
         "bun" => {
-            run_update_step("bun", &["update", "-g", "@vera-ai/cli"])?;
+            run_update_step("bun", &["install", "-g", "@vera-ai/cli@latest"])?;
             run_update_step("bunx", &["@vera-ai/cli", "install"])?;
         }
         "pip" => {
@@ -599,7 +599,7 @@ mod tests {
 
     #[test]
     fn suggested_update_command_known_methods() {
-        assert!(suggested_update_command(Some("npm")).contains("npm update"));
+        assert!(suggested_update_command(Some("npm")).contains("npm install"));
         assert!(suggested_update_command(Some("bun")).contains("bunx"));
         assert!(suggested_update_command(Some("pip")).contains("pip install"));
         assert!(suggested_update_command(Some("uv")).contains("uvx"));
