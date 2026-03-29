@@ -241,8 +241,8 @@ impl VeraConfig {
                     return;
                 }
 
-                let vram_mb = detect_gpu_vram_mb(ep);
-                if let Some(vram) = vram_mb {
+                let gpu_info = detect_gpu_info(ep);
+                if let Some(vram) = gpu_info.vram_free_mb {
                     tracing::info!("detected GPU VRAM: {vram}MB");
                     // Auto-scale batch_size based on VRAM.
                     // Prioritize speed: use large batches when VRAM allows.
@@ -270,8 +270,10 @@ impl VeraConfig {
                         );
                     }
                 } else {
-                    // Could not detect VRAM; use safe defaults.
-                    self.embedding.batch_size = 32;
+                    // Could not detect VRAM; use conservative defaults.
+                    // DirectML/CoreML/OpenVINO lack CLI VRAM detection,
+                    // so pick a safe batch size that won't OOM on small GPUs.
+                    self.embedding.batch_size = 16;
                 }
             }
             InferenceBackend::Api => {}
@@ -279,56 +281,137 @@ impl VeraConfig {
     }
 }
 
+/// GPU information collected from a single detection pass.
+#[derive(Debug, Clone)]
+pub struct GpuInfo {
+    /// Free VRAM in MB, if detectable.
+    pub vram_free_mb: Option<u64>,
+    /// Device fingerprint string for profile keying.
+    pub fingerprint: String,
+}
+
+/// Detect GPU information (VRAM and device fingerprint) for the given
+/// execution provider. Runs the vendor CLI tool once and extracts both
+/// pieces of data, avoiding duplicate subprocess calls.
+pub fn detect_gpu_info(ep: OnnxExecutionProvider) -> GpuInfo {
+    match ep {
+        OnnxExecutionProvider::Cuda => detect_nvidia_gpu_info(),
+        OnnxExecutionProvider::Rocm => detect_rocm_gpu_info(),
+        _ => GpuInfo {
+            vram_free_mb: None,
+            fingerprint: host_fingerprint(ep),
+        },
+    }
+}
+
 /// Detect available GPU VRAM in MB for the given execution provider.
 ///
 /// For CUDA/ROCm, runs `nvidia-smi` or `rocm-smi`. Returns `None` if
 /// detection fails (command not found, parse error, etc.).
-fn detect_gpu_vram_mb(ep: OnnxExecutionProvider) -> Option<u64> {
-    match ep {
-        OnnxExecutionProvider::Cuda => detect_nvidia_vram_mb(),
-        OnnxExecutionProvider::Rocm => detect_rocm_vram_mb(),
-        // DirectML, CoreML, OpenVINO: no standard CLI detection.
-        _ => None,
-    }
+pub fn detect_gpu_vram_mb(ep: OnnxExecutionProvider) -> Option<u64> {
+    detect_gpu_info(ep).vram_free_mb
 }
 
-/// Query free VRAM via `nvidia-smi`.
-fn detect_nvidia_vram_mb() -> Option<u64> {
+fn detect_nvidia_gpu_info() -> GpuInfo {
+    // Single nvidia-smi call that returns free VRAM, device name, total VRAM, and driver.
     let output = std::process::Command::new("nvidia-smi")
-        .args(["--query-gpu=memory.free", "--format=csv,noheader,nounits"])
+        .args([
+            "--query-gpu=memory.free,name,memory.total,driver_version",
+            "--format=csv,noheader,nounits",
+        ])
         .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
+        .ok();
+    let Some(output) = output.filter(|o| o.status.success()) else {
+        return GpuInfo {
+            vram_free_mb: None,
+            fingerprint: host_fingerprint(OnnxExecutionProvider::Cuda),
+        };
+    };
     let stdout = String::from_utf8_lossy(&output.stdout);
-    // Take the first GPU's free memory.
-    stdout.lines().next()?.trim().parse::<u64>().ok()
+    let first_line = stdout.lines().find_map(|line| {
+        let trimmed = line.trim();
+        (!trimmed.is_empty()).then(|| trimmed.to_string())
+    });
+    let Some(line) = first_line else {
+        return GpuInfo {
+            vram_free_mb: None,
+            fingerprint: host_fingerprint(OnnxExecutionProvider::Cuda),
+        };
+    };
+    // CSV columns: memory.free, name, memory.total, driver_version
+    let parts: Vec<&str> = line.split(',').map(str::trim).collect();
+    let vram_free_mb = parts.first().and_then(|s| s.parse::<u64>().ok());
+    // Fingerprint from name, total VRAM, driver (columns 1-3).
+    let fingerprint = if parts.len() >= 4 {
+        format!("{}|{}|{}", parts[1], parts[2], parts[3])
+    } else {
+        line.replace(", ", "|").replace(',', "|")
+    };
+    GpuInfo {
+        vram_free_mb,
+        fingerprint,
+    }
 }
 
-/// Query total VRAM via `rocm-smi`.
-fn detect_rocm_vram_mb() -> Option<u64> {
+fn detect_rocm_gpu_info() -> GpuInfo {
+    // rocm-smi: get VRAM info and product name in one call.
     let output = std::process::Command::new("rocm-smi")
-        .args(["--showmeminfo", "vram", "--csv"])
+        .args(["--showproductname", "--showmeminfo", "vram", "--csv"])
         .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
+        .ok();
+    let Some(output) = output.filter(|o| o.status.success()) else {
+        return GpuInfo {
+            vram_free_mb: None,
+            fingerprint: host_fingerprint(OnnxExecutionProvider::Rocm),
+        };
+    };
     let stdout = String::from_utf8_lossy(&output.stdout);
-    // CSV output: header line then data. Look for free VRAM column.
+    let mut vram_free_mb = None;
+    let mut fingerprint_line = None;
     for line in stdout.lines().skip(1) {
-        // Format varies; try to find a numeric MB value.
-        if let Some(val) = line
-            .split(',')
-            .filter_map(|s| s.trim().parse::<u64>().ok())
-            .next()
-        {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with("GPU") {
+            continue;
+        }
+        if fingerprint_line.is_none() {
+            fingerprint_line = Some(trimmed.replace(", ", "|").replace(',', "|"));
+        }
+        if vram_free_mb.is_none() {
             // rocm-smi reports bytes; convert to MB.
-            return Some(val / (1024 * 1024));
+            vram_free_mb = line
+                .split(',')
+                .filter_map(|s| s.trim().parse::<u64>().ok())
+                .next()
+                .map(|bytes| bytes / (1024 * 1024));
         }
     }
-    None
+    GpuInfo {
+        vram_free_mb,
+        fingerprint: fingerprint_line
+            .unwrap_or_else(|| host_fingerprint(OnnxExecutionProvider::Rocm)),
+    }
+}
+
+fn host_fingerprint(ep: OnnxExecutionProvider) -> String {
+    let host = std::env::var("HOSTNAME")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            std::process::Command::new("hostname")
+                .output()
+                .ok()
+                .filter(|o| o.status.success())
+                .and_then(|o| {
+                    let s = String::from_utf8_lossy(&o.stdout).trim().to_string();
+                    (!s.is_empty()).then_some(s)
+                })
+        })
+        .unwrap_or_else(|| "unknown-host".to_string());
+    format!(
+        "{host}|os={}|arch={}|backend={ep}",
+        std::env::consts::OS,
+        std::env::consts::ARCH
+    )
 }
 
 /// Resolve the effective inference backend from a CLI flag or environment.

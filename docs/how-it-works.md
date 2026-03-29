@@ -73,9 +73,9 @@ The index is a single SQLite database file plus a Tantivy directory. No external
 
 ## Local GPU Batching
 
-Local ONNX indexing does not treat `embedding.batch_size` as a fixed GPU launch size. Vera sorts chunks by length, tokenizes each local batch, then shapes micro-batches from the actual sequence lengths. Long inputs shrink roughly with the square of padded sequence length, and Vera keeps learned safe and failed batch windows per length bucket so it can push harder on roomy GPUs without repeating the same OOM on smaller ones.
+Local ONNX indexing does not treat `embedding.batch_size` as a fixed GPU launch size. Vera sorts chunks by length, tokenizes each local batch, then shapes micro-batches from the actual sequence lengths. Long inputs shrink roughly with the square of padded sequence length, and Vera keeps learned safe and failed batch windows per length bucket so it can push harder on roomy GPUs without repeating the same OOM on smaller ones. Cold-start estimates also scale down for large models: the ONNX file size is used as a proxy for GPU memory footprint, so a 400 MB model gets a proportionally smaller initial batch than a 50 MB one.
 
-Those learned windows persist under `~/.vera/adaptive-batch-scaler.json`. The persisted state is keyed by backend, device fingerprint, and model identity. On the next run, Vera treats the saved window as a warm-start hint with a small safety margin, not as a blind guarantee, then promotes or demotes it again based on live results.
+Those learned windows persist under `~/.vera/adaptive-batch-scaler.json`. The persisted state is keyed by backend, device fingerprint, and model identity. On the next run, Vera treats the saved window as a warm-start hint with a small safety margin, not as a blind guarantee, then promotes or demotes it again based on live results. GPU info (VRAM and device fingerprint) is collected in a single vendor CLI call per session, shared across config and the batch scaler. If even batch_size=1 triggers an OOM, Vera reports a clear error with actionable suggestions (switch to CPU, use a smaller model, or free GPU memory) instead of a raw ONNX stack trace.
 
 ## Pipeline Summary
 

@@ -1624,7 +1624,11 @@ fn extract_zip(data: &[u8], entry_path: &str, dest: &std::path::Path) -> Result<
 }
 
 /// Extract all DLL files from a zip archive's lib/ directory (GPU builds need provider libs).
-fn extract_zip_all_libs(data: &[u8], _archive_name: &str, dest_dir: &std::path::Path) -> Result<()> {
+fn extract_zip_all_libs(
+    data: &[u8],
+    _archive_name: &str,
+    dest_dir: &std::path::Path,
+) -> Result<()> {
     #[cfg(target_os = "windows")]
     {
         let temp_zip = dest_dir.join("_ort_download.zip");

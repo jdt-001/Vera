@@ -30,16 +30,24 @@ struct BatchBucketWindow {
     loaded_from_disk: bool,
 }
 
+/// Reference model size (MB) for cold-start batch scaling. Models larger than
+/// this get proportionally smaller initial batch estimates.
+const REFERENCE_MODEL_SIZE_MB: u64 = 100;
+
 #[derive(Debug, Clone, Default)]
 struct AdaptiveBatchScaler {
     max_length: usize,
+    /// ONNX model file size in MB, used to dampen cold-start batch estimates
+    /// for large models.
+    model_size_mb: u64,
     buckets: BTreeMap<usize, BatchBucketWindow>,
 }
 
 impl AdaptiveBatchScaler {
-    fn new(max_length: usize) -> Self {
+    fn new(max_length: usize, model_size_mb: u64) -> Self {
         Self {
             max_length: max_length.max(1),
+            model_size_mb,
             buckets: BTreeMap::new(),
         }
     }
@@ -103,6 +111,14 @@ impl AdaptiveBatchScaler {
         let scaled = requested
             .saturating_mul(reference_len.saturating_mul(reference_len))
             .div_ceil(seq_len.saturating_mul(seq_len));
+        // Dampen for large models: if the model is bigger than the reference
+        // size, reduce the cold-start estimate proportionally.
+        let scaled = if self.model_size_mb > REFERENCE_MODEL_SIZE_MB {
+            let ratio = REFERENCE_MODEL_SIZE_MB.max(1) as f64 / self.model_size_mb as f64;
+            (scaled as f64 * ratio).ceil() as u64
+        } else {
+            scaled
+        };
         scaled.clamp(1, requested) as usize
     }
 }
@@ -156,9 +172,10 @@ struct PersistedAdaptiveBatchScalerState {
 impl PersistedAdaptiveBatchScaler {
     fn load_or_new(
         max_length: usize,
+        model_size_mb: u64,
         persistence: Option<AdaptiveBatchScalerPersistenceTarget>,
     ) -> Self {
-        let mut scaler = AdaptiveBatchScaler::new(max_length);
+        let mut scaler = AdaptiveBatchScaler::new(max_length, model_size_mb);
 
         if let Some(target) = persistence.as_ref() {
             match load_persisted_batch_scaler(&target.path, &target.profile) {
@@ -170,6 +187,7 @@ impl PersistedAdaptiveBatchScaler {
                         "loaded persisted adaptive batch scaler"
                     );
                     scaler = loaded;
+                    scaler.model_size_mb = model_size_mb;
                 }
                 Ok(None) => {}
                 Err(error) => {
@@ -271,8 +289,15 @@ impl LocalEmbeddingProvider {
                     None
                 }
             };
+            let model_size_mb = config
+                .cached_asset_paths()
+                .ok()
+                .and_then(|p| fs::metadata(&p.onnx_path).ok())
+                .map(|m| m.len() / (1024 * 1024))
+                .unwrap_or(0);
             Some(Arc::new(PersistedAdaptiveBatchScaler::load_or_new(
                 config.max_length,
+                model_size_mb,
                 persistence,
             )))
         };
@@ -528,6 +553,22 @@ impl LocalEmbeddingProvider {
                 left.append(&mut right);
                 Ok(left)
             }
+            Err(error) if encodings.len() == 1 && is_retryable_onnx_allocation_error(&error) => {
+                self.note_batch_failure(encodings);
+                let seq_len = batch_max_len(encodings);
+                tracing::error!(
+                    seq_len,
+                    "GPU out of memory even with batch_size=1. \
+                     The model is too large for available VRAM. \
+                     Try: (1) use CPU mode instead of GPU, \
+                     (2) use a smaller/quantized model, \
+                     (3) free GPU memory from other applications"
+                );
+                Err(error.context(
+                    "GPU out of memory with batch_size=1: model too large for available VRAM. \
+                     Try CPU mode, a smaller model, or free GPU memory from other applications",
+                ))
+            }
             Err(error) => Err(error),
         }
     }
@@ -563,7 +604,8 @@ fn build_batch_scaler_persistence_target(
     config: &LocalEmbeddingModelConfig,
 ) -> Result<Option<AdaptiveBatchScalerPersistenceTarget>> {
     let path = crate::local_models::vera_home_dir()?.join("adaptive-batch-scaler.json");
-    let device_fingerprint = detect_device_fingerprint(ep);
+    let gpu_info = crate::config::detect_gpu_info(ep);
+    let device_fingerprint = gpu_info.fingerprint;
     let model_identity = config.model_identity();
     let max_length = config.max_length;
     let key =
@@ -618,6 +660,7 @@ fn load_persisted_batch_scaler(
 
     Ok(Some(AdaptiveBatchScaler {
         max_length: record.max_length.max(1),
+        model_size_mb: 0, // will be overwritten by caller
         buckets: record
             .buckets
             .iter()
@@ -695,56 +738,6 @@ fn now_unix_secs() -> u64 {
 fn persisted_batch_margin(batch_len: usize) -> usize {
     let margin = batch_len.div_ceil(8).max(1);
     batch_len.saturating_sub(margin).max(1)
-}
-
-fn detect_device_fingerprint(ep: OnnxExecutionProvider) -> String {
-    match ep {
-        OnnxExecutionProvider::Cuda => command_fingerprint(
-            "nvidia-smi",
-            &[
-                "--query-gpu=name,memory.total,driver_version",
-                "--format=csv,noheader,nounits",
-            ],
-        )
-        .unwrap_or_else(|| host_fingerprint(ep)),
-        OnnxExecutionProvider::Rocm => command_fingerprint(
-            "rocm-smi",
-            &["--showproductname", "--showmeminfo", "vram", "--csv"],
-        )
-        .unwrap_or_else(|| host_fingerprint(ep)),
-        _ => host_fingerprint(ep),
-    }
-}
-
-fn command_fingerprint(program: &str, args: &[&str]) -> Option<String> {
-    let output = std::process::Command::new(program)
-        .args(args)
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    stdout
-        .lines()
-        .find_map(|line| {
-            let trimmed = line.trim();
-            (!trimmed.is_empty() && !trimmed.starts_with("GPU")).then(|| trimmed.to_string())
-        })
-        .map(|line| line.replace(", ", "|").replace(',', "|"))
-}
-
-fn host_fingerprint(ep: OnnxExecutionProvider) -> String {
-    let host = std::env::var("HOSTNAME")
-        .ok()
-        .filter(|value| !value.trim().is_empty())
-        .or_else(|| command_fingerprint("hostname", &[]))
-        .unwrap_or_else(|| "unknown-host".to_string());
-    format!(
-        "{host}|os={}|arch={}|backend={ep}",
-        std::env::consts::OS,
-        std::env::consts::ARCH
-    )
 }
 
 fn batch_max_len(encodings: &[Encoding]) -> usize {
@@ -980,14 +973,29 @@ mod tests {
 
     #[test]
     fn adaptive_batch_scaler_shrinks_long_batches_quadratically() {
-        let scaler = AdaptiveBatchScaler::new(512);
+        let scaler = AdaptiveBatchScaler::new(512, 0);
         assert_eq!(scaler.recommend_batch_len(128, 64), 128);
         assert_eq!(scaler.recommend_batch_len(128, 512), 32);
     }
 
     #[test]
+    fn adaptive_batch_scaler_dampens_cold_start_for_large_models() {
+        // A 400MB model (4x reference) should get ~1/4 the cold-start batch size.
+        let small = AdaptiveBatchScaler::new(512, 50);
+        let large = AdaptiveBatchScaler::new(512, 400);
+        let small_batch = small.recommend_batch_len(128, 512);
+        let large_batch = large.recommend_batch_len(128, 512);
+        assert!(
+            large_batch < small_batch,
+            "large model ({large_batch}) should get smaller cold-start batch than small model ({small_batch})"
+        );
+        // 400MB is 4x reference (100MB), so batch should be ~1/4 of 32 = 8.
+        assert_eq!(large_batch, 8);
+    }
+
+    #[test]
     fn adaptive_batch_scaler_learns_safe_windows_per_length_bucket() {
-        let mut scaler = AdaptiveBatchScaler::new(512);
+        let mut scaler = AdaptiveBatchScaler::new(512, 0);
         assert_eq!(scaler.recommend_batch_len(128, 512), 32);
 
         scaler.note_success(512, 32);
@@ -1002,7 +1010,7 @@ mod tests {
 
     #[test]
     fn adaptive_batch_scaler_keeps_short_and_long_buckets_independent() {
-        let mut scaler = AdaptiveBatchScaler::new(512);
+        let mut scaler = AdaptiveBatchScaler::new(512, 0);
         scaler.note_failure(512, 48);
 
         assert_eq!(scaler.recommend_batch_len(128, 512), 24);
@@ -1020,7 +1028,7 @@ mod tests {
             model_identity: "jina".to_string(),
             max_length: 512,
         };
-        let mut scaler = AdaptiveBatchScaler::new(512);
+        let mut scaler = AdaptiveBatchScaler::new(512, 0);
         scaler.note_success(512, 40);
         scaler.note_failure(512, 48);
 
@@ -1043,7 +1051,7 @@ mod tests {
             model_identity: "jina".to_string(),
             max_length: 512,
         };
-        let mut scaler = AdaptiveBatchScaler::new(512);
+        let mut scaler = AdaptiveBatchScaler::new(512, 0);
         scaler.note_success(512, 40);
         save_persisted_batch_scaler(&path, &profile, &scaler).unwrap();
 
@@ -1071,7 +1079,7 @@ mod tests {
             model_identity: "jina".to_string(),
             max_length: 512,
         };
-        let mut scaler = AdaptiveBatchScaler::new(512);
+        let mut scaler = AdaptiveBatchScaler::new(512, 0);
         scaler.note_success(512, 128);
 
         save_persisted_batch_scaler(&path, &profile, &scaler).unwrap();

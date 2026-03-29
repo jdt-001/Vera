@@ -373,7 +373,6 @@ fn extract_exact_identifier_case(query: &str) -> Option<String> {
         .map(ToString::to_string)
 }
 
-
 fn query_mentions_implementation(query: &str) -> bool {
     let lower = query.to_ascii_lowercase();
     lower.contains("implement")
@@ -448,7 +447,6 @@ fn uppercase_identifier_query(identifier: &str) -> bool {
         .next()
         .is_some_and(|ch| ch.is_ascii_uppercase())
 }
-
 
 fn result_key(result: &SearchResult) -> String {
     format!(

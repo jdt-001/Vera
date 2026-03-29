@@ -491,7 +491,6 @@ fn stamp_rank_scores(mut results: Vec<SearchResult>) -> Vec<SearchResult> {
     results
 }
 
-
 fn looks_like_path_fragment(token: &str) -> bool {
     token.contains('/') || token.contains('\\')
 }
