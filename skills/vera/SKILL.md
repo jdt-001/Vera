@@ -1,6 +1,6 @@
 ---
 name: vera
-description: Semantic code search, regex pattern search, and symbol lookup across a local repository. Returns ranked markdown codeblocks with file path, line range, content, and optional symbol info. Use when the user asks to find where logic lives, what calls a function, how a feature is implemented, which files handle a concept, or wants to explore unfamiliar code by intent. Also use for symbol lookup when the exact name appears in many files. Use `vera grep` for regex pattern matching scoped to indexed files. Use rg for bulk find-and-replace or searching outside the index.
+description: Semantic code search, regex pattern search, and symbol lookup across a local repository. Returns ranked markdown codeblocks with file path, line range, content, and optional symbol info. Use `vera search` for conceptual/behavioral queries (how a feature works, where logic lives, exploring unfamiliar code). Use `vera grep` for exact strings, regex patterns, imports, and TODOs. Use `vera references` to trace callers/callees. Use rg only for bulk find-and-replace or files outside the index.
 ---
 
 # Vera
@@ -46,16 +46,27 @@ pub async fn search_hybrid(...) -> Result<Vec<SearchResult>> { ... }
 
 The info string contains `file_path:line_start-line_end` and optional `symbol_type:symbol_name`. Use `--json` for compact single-line JSON (programmatic consumption), or `--raw` for verbose human-readable output. Use `--timing` to print pipeline step durations to stderr.
 
+## Choosing the Right Tool
+
+| Need | Tool |
+|------|------|
+| Concepts, behavior, "how does X work" | `vera search` |
+| Exact strings, regex, imports, TODOs | `vera grep` |
+| Bulk find-and-replace, files outside index | `rg` |
+
+`vera search` understands synonyms and related concepts. `vera grep` matches literal patterns.
+
 ## Query Strategy
 
 - Describe behavior or intent: "JWT token validation", "request rate limiting", not "code" or "utils".
+- Avoid overly broad queries like "authentication" or "tools". Be specific about what aspect you need.
+- Match your intent to the query: for documentation, use doc-focused keywords ("setup guide", "configuration README"); for code, use implementation terms ("token refresh logic", "error handling implementation").
+- Use 2-3 varied queries to capture different aspects (e.g., "OAuth token refresh", "JWT expiry handling", "auth middleware").
 - For known symbol names, search the exact name: `vera search "parse_config"`.
 - Start broad, then narrow with `--lang`, `--path`, `--type`, `--limit`.
 - Vera favors source files by default. Use `--scope docs` for prose and ADRs, `--scope runtime` for extracted bundles, and `--include-generated` for minified/dist artifacts.
 - After code changes mid-session, run `vera update .` before searching again (or use `vera watch .` to auto-update).
-- Use `vera grep` for regex patterns scoped to indexed files (respects .gitignore/.veraignore).
 - Use `vera search --deep` when initial results need broader context (follows symbols from first results).
-- Use `rg` for bulk find-and-replace or searching outside the index.
 
 ## Failure Recovery
 
