@@ -167,12 +167,17 @@ impl LocalEmbeddingModelConfig {
             tracing::debug!("adjust_for_gpu: CPU backend, keeping {}", self.onnx_file);
             return;
         }
-        // Only swap if the user hasn't overridden the ONNX file via env vars
-        // and we're using the default quantized model.
-        let user_overrode_onnx = env_override(LOCAL_EMBEDDING_ONNX_FILE_ENV).is_some();
-        if user_overrode_onnx {
-            tracing::debug!("adjust_for_gpu: user overrode ONNX file via env, skipping swap");
-            return;
+        // Only swap if the user hasn't overridden the ONNX file to a
+        // non-default value via env vars. Note: the CLI config loader sets
+        // this env var from saved config even for default values, so we
+        // check the actual value, not just presence.
+        if let Some(env_val) = env_override(LOCAL_EMBEDDING_ONNX_FILE_ENV) {
+            if env_val != EMBEDDING_ONNX_FILE {
+                tracing::debug!(
+                    "adjust_for_gpu: user overrode ONNX file via env to {env_val}, skipping swap"
+                );
+                return;
+            }
         }
         if self.onnx_file == EMBEDDING_ONNX_FILE {
             tracing::info!(
