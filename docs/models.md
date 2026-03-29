@@ -90,6 +90,33 @@ The defaults are:
 
 If your model uses different names, pass the matching `--embedding-*` flags.
 
+## Inference Speed
+
+GPU is recommended; CPU works but is slow for initial indexing. After the first index, `vera update .` only re-embeds changed files, so updates are fast even on CPU.
+
+| Backend | Hardware | Time | Notes |
+|---------|----------|------|-------|
+| CUDA | RTX 4080 | **~8 s** | Recommended for large repos |
+| API mode | Remote GPU | ~56 s | Requires API key, no local compute |
+| CPU | Ryzen 5 7600X3D (6c/12t) | ~6 min | Use GPU or API mode if this is too slow |
+
+## API Mode
+
+```bash
+export EMBEDDING_MODEL_BASE_URL=https://your-embedding-api/v1
+export EMBEDDING_MODEL_ID=your-embedding-model
+export EMBEDDING_MODEL_API_KEY=your-api-key
+
+# Optional reranker
+export RERANKER_MODEL_BASE_URL=https://your-reranker-api/v1
+export RERANKER_MODEL_ID=your-reranker-model
+export RERANKER_MODEL_API_KEY=your-api-key
+
+vera setup --api
+```
+
+Only model calls leave your machine. Indexing, storage, and search remain local.
+
 ## Notes
 
 - These options only affect local embeddings. API mode is unchanged.

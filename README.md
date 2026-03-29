@@ -165,36 +165,13 @@ Set `VERA_NO_UPDATE_CHECK=1` to disable the automatic check.
 
 ## Model Backend
 
-Vera itself is always local: the index lives in `.vera/`, config in `~/.vera/`. The backend choice only affects where embeddings and reranking run. Full details on models, GPU backends, custom embeddings, and adaptive batching: [docs/features.md](docs/features.md#model-backend) and [docs/models.md](docs/models.md).
+Vera itself is always local: the index lives in `.vera/`, config in `~/.vera/`. The backend choice only affects where embeddings and reranking run.
 
-`vera setup` downloads two curated ONNX models and auto-detects your GPU. You can also specify a backend directly: `--onnx-jina-cuda` (NVIDIA), `--onnx-jina-rocm` (AMD), `--onnx-jina-directml` (Windows), `--onnx-jina-coreml` (Apple Silicon), `--onnx-jina-openvino` (Intel). Use `vera setup --api` to point at any OpenAI-compatible endpoint instead.
-
-### Inference Speed
+`vera setup` downloads two curated ONNX models and auto-detects your GPU. You can also specify a backend directly: `--onnx-jina-cuda` (NVIDIA), `--onnx-jina-rocm` (AMD), `--onnx-jina-directml` (Windows), `--onnx-jina-coreml` (Apple Silicon), `--onnx-jina-openvino` (Intel). Use `vera setup --api` to point at any OpenAI-compatible endpoint instead. Only model calls leave your machine.
 
 GPU is recommended; CPU works but is slow for initial indexing. After the first index, `vera update .` only re-embeds changed files, so updates are fast even on CPU.
 
-| Backend | Hardware | Time | Notes |
-|---------|----------|------|-------|
-| CUDA | RTX 4080 | **~8 s** | Recommended for large repos |
-| API mode | Remote GPU | ~56 s | Requires API key, no local compute |
-| CPU | Ryzen 5 7600X3D (6c/12t) | ~6 min | Use GPU or API mode if this is too slow |
-
-### API Mode
-
-```bash
-export EMBEDDING_MODEL_BASE_URL=https://your-embedding-api/v1
-export EMBEDDING_MODEL_ID=your-embedding-model
-export EMBEDDING_MODEL_API_KEY=your-api-key
-
-# Optional reranker
-export RERANKER_MODEL_BASE_URL=https://your-reranker-api/v1
-export RERANKER_MODEL_ID=your-reranker-model
-export RERANKER_MODEL_API_KEY=your-api-key
-
-vera setup --api
-```
-
-Only model calls leave your machine. Indexing, storage, and search remain local.
+Full details on models, GPU backends, inference speed, custom embeddings, and API mode: [docs/models.md](docs/models.md). Feature overview: [docs/features.md](docs/features.md#model-backend).
 
 ## Usage
 
@@ -272,27 +249,17 @@ Removes `~/.vera/` (binary, models, ONNX Runtime libs, config), agent skill file
 
 If something isn't working, see [troubleshooting](docs/troubleshooting.md).
 
-## Benchmark Snapshot
+## Benchmarks
 
-Comparison from `v0.4.0` against other tools on the same workload (17 tasks across `ripgrep`, `flask`, `fastify`). Vera has improved ~55% on Recall@5 and ~83% on nDCG@10 since this comparison.
+21-task benchmark across `ripgrep`, `flask`, `fastify`, and `turborepo`:
 
-| Metric | ripgrep | cocoindex-code | vector-only | Vera hybrid |
-|--------|---------|----------------|-------------|-------------|
-| Recall@5 | 0.2817 | 0.3730 | 0.4921 | **0.6961** |
-| Recall@10 | 0.3651 | 0.5040 | 0.6627 | **0.7549** |
-| MRR@10 | 0.2625 | 0.3517 | 0.2814 | **0.6009** |
-| nDCG@10 | 0.2929 | 0.5206 | 0.7077 | **0.8008** |
+| Metric | ripgrep | cocoindex | ColGREP (149M) | Vera |
+|--------|---------|-----------|----------------|------|
+| Recall@5 | 0.28 | 0.37 | 0.67 | **0.78** |
+| MRR@10 | 0.26 | 0.35 | 0.62 | **0.91** |
+| nDCG@10 | 0.29 | 0.52 | 0.56 | **0.84** |
 
-### Current Results (v0.7.0+)
-
-21 tasks across `ripgrep`, `flask`, `fastify`, and `turborepo`:
-
-| Version | Recall@1 | Recall@5 | Recall@10 | MRR@10 | nDCG@10 |
-|--------|----------|----------|-----------|--------|---------|
-| `v0.4.0` | 0.2421 | 0.5040 | 0.5159 | 0.5016 | 0.4570 |
-| `v0.7.0+` | **0.7183** | **0.7778** | **0.8254** | **0.9095** | **0.8361** |
-
-More detail: [docs/benchmarks.md](docs/benchmarks.md) · [benchmarks/indexing-performance.md](benchmarks/indexing-performance.md) · [benchmarks/reports/reproduction-guide.md](benchmarks/reports/reproduction-guide.md)
+Full methodology, version history, and additional comparisons: [docs/benchmarks.md](docs/benchmarks.md).
 
 ## Supported Languages
 

@@ -10,7 +10,7 @@ For config and document-like files, Vera uses whole-file chunks instead. Module-
 
 Each chunk carries metadata: file path, line range, language, symbol name, and symbol type. This means search results map to actual code boundaries, not random slices.
 
-Symbol-aware chunking scores 2.3× higher MRR on symbol lookup than sliding-window chunking (0.55 vs 0.24), while using 14% fewer tokens. Large symbols (>150 lines) are split at logical boundaries. Languages without a tree-sitter grammar fall back to sliding-window chunking.
+Large symbols (>150 lines) are split at logical boundaries. Languages without a tree-sitter grammar fall back to sliding-window chunking. See [features.md](features.md#tree-sitter-structural-parsing) for chunking benchmarks.
 
 ## Retrieval: BM25 + Vector Search
 
@@ -69,11 +69,7 @@ The index is a single SQLite database file plus a Tantivy directory. No external
 
 ## Incremental Updates
 
-`vera update .` detects changed files by comparing content hashes against the stored index. Only modified files are re-parsed, re-chunked, and re-embedded. For small changes this takes seconds, not minutes.
-
-## Local GPU Batching
-
-Local ONNX indexing shapes micro-batches from actual token lengths rather than using a fixed batch size. Vera learns safe batch windows per length bucket from real successes and allocation failures, persists them across runs at `~/.vera/adaptive-batch-scaler.json`, and warm-starts on the next session. See [features.md](features.md#adaptive-gpu-batching) for details.
+`vera update .` compares content hashes against the stored index and only re-processes changed files. See [features.md](features.md#incremental-updates) for details.
 
 ## Pipeline Summary
 

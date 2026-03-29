@@ -45,14 +45,7 @@ For how the pipeline fits together, see [docs/how-it-works.md](docs/how-it-works
 
 ## Adding a Language
 
-1. Add a variant to the `Language` enum in `crates/vera-core/src/types.rs` (alphabetical order)
-2. Add extension mapping in `Language::from_extension()` in the same file
-3. Add the tree-sitter grammar dependency to `crates/vera-core/Cargo.toml`
-4. Wire the grammar in `parsing/languages.rs` → `tree_sitter_grammar()`
-5. Add symbol extraction rules in `parsing/extractor.rs` → `classify_node()`
-6. Write tests: extension mapping, grammar loading, at least 2 symbol extraction assertions
-
-The full language list is at [docs/supported-languages.md](docs/supported-languages.md).
+See [docs/architecture.md](docs/architecture.md#adding-a-new-language) for the step-by-step checklist. The full language list is at [docs/supported-languages.md](docs/supported-languages.md).
 
 ## Conventions
 
