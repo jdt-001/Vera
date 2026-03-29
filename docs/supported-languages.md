@@ -1,6 +1,6 @@
 # Supported Languages
 
-Vera supports 63 languages and file formats. Each file is detected by extension (or filename for extensionless files like `Dockerfile` and `Makefile`).
+Vera supports 64 languages and file formats. Each file is detected by extension (or filename for extensionless files like `Dockerfile` and `Makefile`).
 
 Languages with a tree-sitter grammar get symbol-level chunking. functions, classes, structs, and methods are extracted as discrete search results. Languages without a grammar fall back to sliding-window text chunking.
 

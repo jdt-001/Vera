@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/lemon07r/Vera/blob/master/LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
 [![GitHub release](https://img.shields.io/github/v/release/lemon07r/Vera?include_prereleases&sort=semver)](https://github.com/lemon07r/Vera/releases)
-[![Languages](https://img.shields.io/badge/languages-63%2B-green.svg)](docs/supported-languages.md)
+[![Languages](https://img.shields.io/badge/languages-64%2B-green.svg)](docs/supported-languages.md)
 
 [Features](docs/features.md)
 ·
@@ -23,7 +23,7 @@
 
 **V**ector **E**nhanced **R**eranking **A**gent
 
-Code search that combines BM25 keyword matching, vector similarity, and cross-encoder reranking. Supports 63 languages (58 with tree-sitter parsing), runs locally, returns structured results with file paths, line ranges, symbol metadata, and relevance scores.
+Code search that combines BM25 keyword matching, vector similarity, and cross-encoder reranking. Supports 64 languages (60 with tree-sitter parsing), runs locally, returns structured results with file paths, line ranges, symbol metadata, and relevance scores.
 
 </div>
 
@@ -41,11 +41,11 @@ vera search "authentication logic"
 | | |
 |---|---|
 | **Cross-encoder reranking** | Most tools stop at retrieval. Vera scores query-candidate pairs jointly, lifting MRR@10 from 0.28 to 0.60. |
-| **Single binary, 63 languages** | One static binary with 58 tree-sitter grammars compiled in. No Python, no language servers, no per-language toolchains. |
+| **Single binary, 64 languages** | One static binary with 60 tree-sitter grammars compiled in. No Python, no language servers, no per-language toolchains. |
 | **Built-in code intelligence** | Call graph analysis, reference finding, dead code detection, and project overview, all from the same index. |
 | **Token-efficient for agents** | Returns symbol-bounded chunks, not entire files. 75-95% fewer tokens on typical queries. |
 
-Vera started after months of maintaining Pampax (a fork of someone's code search tool) and running into deep-rooted bugs and missing features like provider-agnostic reranking. Every design choice comes from real benchmarking and evaluation. See the full [feature list](docs/features.md) for everything Vera can do.
+Vera started after months of maintaining Pampax (a fork of someone's code search tool) and running into deep-rooted bugs and missing features like provider-agnostic reranking. Every design choice comes from careful research, learning from other projects, benchmarking and evaluation. See the full [feature list](docs/features.md) for everything Vera can do.
 
 ## Installation
 
