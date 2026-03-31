@@ -211,6 +211,12 @@ Full methodology and version history: [docs/benchmarks.md](docs/benchmarks.md).
 
 `vera agent install` installs the Vera skill for your coding agents and offers to add a usage snippet to your project's `AGENTS.md`, `CLAUDE.md`, `COPILOT.md`, or editor rules file. Installed agents start preselected in the interactive picker, deselecting one removes its existing Vera skill install, and stale installs can be refreshed in one step before you enter the full picker.
 
+Alternatively, install the Vera skill with the [skills CLI](https://github.com/vercel-labs/skills):
+
+```bash
+npx skills add lemon07r/Vera
+```
+
 If you skipped the prompt or want to add it manually:
 
 ```markdown
