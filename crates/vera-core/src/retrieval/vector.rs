@@ -312,7 +312,7 @@ mod tests {
 
         // Generate embeddings and store vectors.
         let vector_store = VectorStore::open_in_memory(dim).unwrap();
-        let embeddings = crate::embedding::embed_chunks(&provider, &chunks, chunks.len())
+        let embeddings = crate::embedding::embed_chunks(&provider, &chunks, chunks.len(), 0)
             .await
             .unwrap();
 

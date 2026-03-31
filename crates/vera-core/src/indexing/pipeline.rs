@@ -215,6 +215,7 @@ where
         &all_chunks,
         batch_size,
         max_concurrent_requests,
+        config.indexing.max_chunk_bytes,
         progress_cb,
     )
     .await

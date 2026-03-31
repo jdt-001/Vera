@@ -281,6 +281,7 @@ pub async fn update_repository<P: EmbeddingProvider>(
                 &all_chunks,
                 config.embedding.batch_size,
                 config.embedding.max_concurrent_requests,
+                config.indexing.max_chunk_bytes,
             )
             .await
             .context("embedding generation failed")?;

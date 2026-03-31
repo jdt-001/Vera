@@ -668,7 +668,7 @@ mod tests {
         // Vector store.
         let vector_path = index_dir.join("vectors.db");
         let vector_store = VectorStore::open(&vector_path, dim).unwrap();
-        let embeddings = embed_chunks(&provider, &all_chunks, all_chunks.len())
+        let embeddings = embed_chunks(&provider, &all_chunks, all_chunks.len(), 0)
             .await
             .unwrap();
         let batch: Vec<(&str, &[f32])> = embeddings

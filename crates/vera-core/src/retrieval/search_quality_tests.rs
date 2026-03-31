@@ -314,7 +314,7 @@ async fn setup_indexed_corpus() -> (
     metadata_store.insert_chunks(&all_chunks).unwrap();
 
     let vector_store = VectorStore::open_in_memory(dim).unwrap();
-    let embeddings = embed_chunks(&provider, &all_chunks, all_chunks.len())
+    let embeddings = embed_chunks(&provider, &all_chunks, all_chunks.len(), 0)
         .await
         .unwrap();
     let batch: Vec<(&str, &[f32])> = embeddings

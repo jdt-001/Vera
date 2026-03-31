@@ -239,6 +239,12 @@ pub(crate) fn configure_backend(
         if let Some(path) = report.indexed_path.as_deref() {
             println!("  Indexed path:         {path}");
         }
+        if effective_backend == InferenceBackend::Api {
+            println!();
+            println!("  Your API settings are saved in the config file above.");
+            println!("  You can remove any EMBEDDING_MODEL_* / RERANKER_MODEL_* env vars");
+            println!("  from your shell. Vera reads from the config file at runtime.");
+        }
     }
 
     Ok(())
@@ -582,6 +588,10 @@ fn configure_api_interactive() -> anyhow::Result<()> {
     }
 
     cliclack::log::success("API backend configured.")?;
+    cliclack::log::info(
+        "Your credentials are saved in ~/.vera/. You can remove any \
+         EMBEDDING_MODEL_* / RERANKER_MODEL_* env vars from your shell.",
+    )?;
     Ok(())
 }
 

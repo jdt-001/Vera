@@ -12,16 +12,26 @@ const MAX_METADATA_VALUE_CHARS: usize = 240;
 const MAX_METADATA_TOKEN_CHARS: usize = 80;
 
 /// Build the structured text used for semantic embeddings.
+///
+/// When `max_bytes` is non-zero the code content is truncated at a line
+/// boundary so the total output (metadata + code) stays within budget.
+/// This prevents oversized chunks from exceeding the embedding model's
+/// context window.
 pub fn build_embedding_text(chunk: &Chunk) -> String {
-    build_structured_text(chunk)
+    build_structured_text(chunk, 0)
+}
+
+/// Like [`build_embedding_text`] but caps the total output at `max_bytes`.
+pub fn build_embedding_text_bounded(chunk: &Chunk, max_bytes: usize) -> String {
+    build_structured_text(chunk, max_bytes)
 }
 
 /// Build the structured text indexed by BM25.
 pub fn build_bm25_text(chunk: &Chunk) -> String {
-    build_structured_text(chunk)
+    build_structured_text(chunk, 0)
 }
 
-fn build_structured_text(chunk: &Chunk) -> String {
+fn build_structured_text(chunk: &Chunk, max_bytes: usize) -> String {
     let mut parts = Vec::new();
     let filename = file_name(&chunk.file_path);
     let path_tokens = normalize_path_tokens(&chunk.file_path);
@@ -71,9 +81,35 @@ fn build_structured_text(chunk: &Chunk) -> String {
     } else {
         "Code"
     };
-    parts.push(format!("{label}:\n{}", chunk.content));
+
+    // When a byte budget is set, truncate the code content so the total
+    // (metadata header + code) fits. Metadata is kept intact since it's
+    // small and high-value for retrieval; only the code body is trimmed.
+    let content = if max_bytes > 0 {
+        let header = parts.join("\n");
+        // header + "\n" + "Code:\n" = overhead before the actual content
+        let overhead = header.len() + 1 + label.len() + 2;
+        let content_budget = max_bytes.saturating_sub(overhead);
+        truncate_at_line_boundary(&chunk.content, content_budget)
+    } else {
+        chunk.content.clone()
+    };
+
+    parts.push(format!("{label}:\n{content}"));
 
     parts.join("\n")
+}
+
+/// Truncate `text` to at most `max_bytes`, cutting at the last newline
+/// boundary that fits. Returns the full string when it already fits.
+fn truncate_at_line_boundary(text: &str, max_bytes: usize) -> String {
+    if max_bytes == 0 || text.len() <= max_bytes {
+        return text.to_string();
+    }
+    // Find the last newline at or before the byte budget.
+    let cut = &text[..max_bytes];
+    let end = cut.rfind('\n').unwrap_or(max_bytes);
+    text[..end].to_string()
 }
 
 fn symbol_line(chunk: &Chunk) -> Option<String> {

@@ -672,6 +672,7 @@ pub async fn embed_chunks<P: EmbeddingProvider>(
     provider: &P,
     chunks: &[Chunk],
     batch_size: usize,
+    max_chunk_bytes: usize,
 ) -> Result<Vec<(String, Vec<f32>)>, EmbeddingError> {
     if chunks.is_empty() {
         return Ok(Vec::new());
@@ -695,7 +696,7 @@ pub async fn embed_chunks<P: EmbeddingProvider>(
             .map(|(index, chunk)| EmbeddingBatchItem {
                 original_index: index,
                 chunk_id: chunk.id.clone(),
-                text: chunk_to_embedding_text(chunk),
+                text: chunk_to_embedding_text(chunk, max_chunk_bytes),
             })
             .collect();
 
@@ -722,6 +723,7 @@ pub async fn embed_chunks_concurrent<P: EmbeddingProvider>(
     chunks: &[Chunk],
     batch_size: usize,
     max_concurrent: usize,
+    max_chunk_bytes: usize,
 ) -> Result<Vec<(String, Vec<f32>)>, EmbeddingError> {
     if chunks.is_empty() {
         return Ok(Vec::new());
@@ -753,7 +755,7 @@ pub async fn embed_chunks_concurrent<P: EmbeddingProvider>(
                 .map(|(orig_idx, chunk)| EmbeddingBatchItem {
                     original_index: *orig_idx,
                     chunk_id: chunk.id.clone(),
-                    text: chunk_to_embedding_text(chunk),
+                    text: chunk_to_embedding_text(chunk, max_chunk_bytes),
                 })
                 .collect()
         })
@@ -804,6 +806,7 @@ pub async fn embed_chunks_concurrent_with_progress<P, F>(
     chunks: &[Chunk],
     batch_size: usize,
     max_concurrent: usize,
+    max_chunk_bytes: usize,
     on_progress: F,
 ) -> Result<Vec<(String, Vec<f32>)>, EmbeddingError>
 where
@@ -835,7 +838,7 @@ where
                 .map(|(orig_idx, chunk)| EmbeddingBatchItem {
                     original_index: *orig_idx,
                     chunk_id: chunk.id.clone(),
-                    text: chunk_to_embedding_text(chunk),
+                    text: chunk_to_embedding_text(chunk, max_chunk_bytes),
                 })
                 .collect()
         })
@@ -882,9 +885,14 @@ where
 /// Format a chunk's content for embedding.
 ///
 /// Prepends metadata context (language, symbol info) to help the model
-/// produce more code-aware embeddings.
-fn chunk_to_embedding_text(chunk: &Chunk) -> String {
-    chunk_text::build_embedding_text(chunk)
+/// produce more code-aware embeddings. When `max_bytes > 0`, the code
+/// content is truncated so the total text fits within the budget.
+fn chunk_to_embedding_text(chunk: &Chunk, max_bytes: usize) -> String {
+    if max_bytes > 0 {
+        chunk_text::build_embedding_text_bounded(chunk, max_bytes)
+    } else {
+        chunk_text::build_embedding_text(chunk)
+    }
 }
 
 // ── Sanitization ─────────────────────────────────────────────────────
