@@ -58,6 +58,8 @@ This is the most expensive stage but also the most impactful. Reranking lifts MR
 
 With local models, the reranker runs on-device via ONNX Runtime. With API mode, it calls your configured endpoint. Obvious filename and path-dominant queries can skip reranking when lexical evidence is already decisive.
 
+Large candidate sets are batched automatically to stay within the reranker's request limits. Oversized documents are truncated at newline boundaries before scoring. See [features.md](features.md#cross-encoder-reranking) for configuration details.
+
 ## Storage
 
 Everything lives in two places:

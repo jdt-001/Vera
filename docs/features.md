@@ -17,6 +17,8 @@ Results from both paths merge through Reciprocal Rank Fusion (RRF), so a result 
 
 After fusion, the top candidates go through a cross-encoder that reads query and candidate together as a single pair. This is the most impactful stage: it lifts MRR@10 from 0.39 to 0.60 (54% improvement). Most code search tools skip this step entirely.
 
+Large candidate sets are automatically batched (default 20 per request, configurable via `VERA_MAX_RERANK_BATCH`). Individual documents exceeding the reranker's context window are truncated at the last newline boundary before the character limit (default 4800, configurable via `VERA_MAX_RERANK_DOC_CHARS`). Both settings work automatically with no required configuration.
+
 ### Multi-Query Search
 
 A single search call can accept multiple queries at once. Run 2-3 varied queries to capture different aspects of what you're looking for (e.g., "OAuth token refresh", "JWT expiry handling", "auth middleware"). Results are deduplicated and reranked together. This reduces round-trips and improves recall.
@@ -62,6 +64,8 @@ Symbol-aware chunking scores 2.3x higher MRR on symbol lookup than sliding-windo
 
 Large symbols (>150 lines) are split at logical boundaries: closing braces, semicolons, blank lines. This preserves readability instead of cutting at arbitrary line counts. Languages without a tree-sitter grammar fall back to sliding-window chunking. Module-level gaps between symbols are kept as chunks when they carry useful retrieval context.
 
+Chunks that exceed the embedding model's input limit are automatically split in a post-processing pass. API mode uses a 24KB byte budget (roughly 6K-7K tokens, safe for any modern embedding model). Local mode uses the model's own tokenizer and max_length. Override with `VERA_MAX_CHUNK_BYTES` if needed.
+
 ### Incremental Updates
 
 `vera update .` compares content hashes against the stored index and only re-parses, re-chunks, and re-embeds changed files. For small changes this takes seconds, not minutes.
@@ -73,6 +77,10 @@ Large symbols (>150 lines) are split at logical boundaries: closing braces, semi
 ### Flexible Exclusions
 
 Vera respects `.gitignore` by default. For more control, `.veraignore` (gitignore syntax) gives full control over what gets indexed. Use `#include .gitignore` at the top to layer extra exclusions on top of gitignore rules. One-off `--exclude` flags, `--no-ignore`, and `--no-default-excludes` are also available.
+
+### Progress Reporting
+
+Indexing shows a live progress bar with file discovery, parsing, and embedding generation phases. JSON output mode (`--json`) skips the progress UI for machine consumption.
 
 ### Verbose Indexing
 
@@ -103,7 +111,7 @@ Vera respects `.gitignore` by default. For more control, `.veraignore` (gitignor
 Indexing, storage, and search always stay on your machine. The backend choice only affects where embeddings and reranking run:
 
 - **Local mode**: `vera setup` downloads curated ONNX models. The full pipeline (BM25 + vector + rerank) runs without external calls.
-- **API mode**: Point at any OpenAI-compatible endpoint (remote APIs or local servers like llama.cpp). Only model calls leave your machine.
+- **API mode**: Point at any OpenAI-compatible endpoint (remote APIs or local servers like llama.cpp). Only model calls leave your machine. Query prefixes for asymmetric embedding models (Qwen3, CodeRankEmbed, E5, BGE) are auto-detected from the model ID. Override with `EMBEDDING_QUERY_PREFIX` for unsupported models.
 
 ### Curated Local Models
 
@@ -215,6 +223,8 @@ During setup, Vera offers to add a usage snippet to your project's agent config 
 ### Cross-Platform
 
 Single static binary for Linux (x86_64, aarch64), macOS (x86_64, aarch64), and Windows (x86_64). Install via npm (`bunx @vera-ai/cli install`), pip (`uvx vera-ai install`), prebuilt binary, Docker, or build from source.
+
+A fully static musl-linked binary (`x86_64-unknown-linux-musl`) is available for environments without standard shared libraries (NixOS, Alpine, minimal containers). It has zero runtime dependencies.
 
 ## Benchmarks
 
