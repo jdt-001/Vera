@@ -74,7 +74,7 @@ docker run --rm -i -v $(pwd):/workspace ghcr.io/lemon07r/vera:cpu
 CPU, CUDA, ROCm, and OpenVINO images available. See [docs/docker.md](docs/docker.md).
 
 **Prebuilt binaries:**
-Download from [GitHub Releases](https://github.com/lemon07r/Vera/releases) for Linux (x86_64, aarch64), macOS (x86_64, aarch64), or Windows (x86_64).
+Download from [GitHub Releases](https://github.com/lemon07r/Vera/releases) for Linux (x86_64, aarch64), macOS (x86_64, aarch64), or Windows (x86_64). For Alpine, NixOS, or minimal containers without glibc, use the `x86_64-unknown-linux-musl` archive (fully static, zero runtime dependencies). The npm/pip wrappers auto-detect musl systems; to force a specific target, set `VERA_TARGET=x86_64-unknown-linux-musl` before running the install command.
 
 **Build from source** (Rust 1.85+):
 ```bash

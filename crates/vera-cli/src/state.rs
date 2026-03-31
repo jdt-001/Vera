@@ -47,6 +47,8 @@ pub struct InstallProvenance {
     pub version: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub binary_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
 }
 
 #[derive(Debug, Clone)]

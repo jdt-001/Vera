@@ -24,10 +24,34 @@ function parseArgs(argv) {
   return { command: argv[0], rest: argv.slice(1) };
 }
 
+function detectMusl() {
+  if (process.platform !== "linux") return false;
+  try {
+    const result = spawnSync("ldd", ["--version"], {
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    const output = (result.stdout || "").toString() + (result.stderr || "").toString();
+    return /musl/i.test(output);
+  } catch {
+    // Fallback: check for musl dynamic linker.
+    try {
+      const entries = fs.readdirSync("/lib");
+      return entries.some((e) => e.startsWith("ld-musl-"));
+    } catch {
+      return false;
+    }
+  }
+}
+
 function resolveTarget(platform, arch) {
+  const override = process.env.VERA_TARGET;
+  if (override) return override;
+
   const key = `${platform}:${arch}`;
   const targets = {
-    "linux:x64": "x86_64-unknown-linux-gnu",
+    "linux:x64": detectMusl()
+      ? "x86_64-unknown-linux-musl"
+      : "x86_64-unknown-linux-gnu",
     "linux:arm64": "aarch64-unknown-linux-gnu",
     "darwin:x64": "x86_64-apple-darwin",
     "darwin:arm64": "aarch64-apple-darwin",
@@ -84,7 +108,7 @@ async function readInstallMetadata() {
   }
 }
 
-async function writeInstallMetadata({ installMethod, version, binaryPath }) {
+async function writeInstallMetadata({ installMethod, version, binaryPath, target }) {
   const metadataPath = installMetadataPath();
   await fsp.mkdir(path.dirname(metadataPath), { recursive: true });
   const current = await readInstallMetadata();
@@ -92,6 +116,7 @@ async function writeInstallMetadata({ installMethod, version, binaryPath }) {
     install_method: installMethod ?? current.install_method ?? null,
     version: version ?? current.version ?? null,
     binary_path: binaryPath ?? current.binary_path ?? null,
+    target: target ?? current.target ?? null,
   };
   const tmpPath = `${metadataPath}.tmp.${process.pid}`;
   await fsp.writeFile(tmpPath, `${JSON.stringify(next, null, 2)}\n`, "utf8");
@@ -300,6 +325,7 @@ async function ensureBinaryInstalled() {
       installMethod: currentInstallMethod(),
       version,
       binaryPath,
+      target,
     });
     return { binaryPath, version };
   }
@@ -334,6 +360,7 @@ async function ensureBinaryInstalled() {
       installMethod: currentInstallMethod(),
       version,
       binaryPath,
+      target,
     });
     return { binaryPath, version };
   } finally {

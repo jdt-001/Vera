@@ -42,6 +42,11 @@ const RERANKER_TOKENIZER_FILE: &str = "tokenizer.json";
 /// The `ort` crate (rc.11) uses `load-dynamic` so any ABI-compatible ORT works.
 const ORT_VERSION: &str = "1.24.4";
 
+/// ONNX Runtime 1.24.x dropped macOS x86_64 binaries. 1.23.2 is the last
+/// release that ships `onnxruntime-osx-x86_64` archives.
+#[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+const ORT_VERSION_MACOS_X86: &str = "1.23.2";
+
 static ORT_INIT_RESULT: OnceLock<std::result::Result<(), String>> = OnceLock::new();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -523,10 +528,10 @@ fn detect_cuda_major_version() -> Option<u32> {
         .or_else(detect_cuda_major_from_nvidia_smi)
 }
 
-/// Platform-specific ORT archive info: (archive_ext, archive_name, primary_lib_path_inside_archive, local_lib_name).
+/// Platform-specific ORT archive info: (archive_ext, archive_name, primary_lib_path_inside_archive, local_lib_name, version).
 fn ort_platform_info(
     ep: OnnxExecutionProvider,
-) -> Result<(&'static str, String, String, &'static str)> {
+) -> Result<(&'static str, String, String, &'static str, &'static str)> {
     let gpu_suffix = match ep {
         OnnxExecutionProvider::Cpu => "",
         OnnxExecutionProvider::Cuda => {
@@ -562,6 +567,7 @@ fn ort_platform_info(
                 base.clone(),
                 format!("{base}/lib/libonnxruntime.so.{ORT_VERSION}"),
                 "libonnxruntime.so",
+                ORT_VERSION,
             ));
         }
         // The CUDA 13 archive is named with `_cuda13` in the filename, but the
@@ -580,6 +586,7 @@ fn ort_platform_info(
             archive_name,
             format!("{internal_base}/lib/libonnxruntime.so.{ORT_VERSION}"),
             "libonnxruntime.so",
+            ORT_VERSION,
         ))
     }
     #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
@@ -593,6 +600,7 @@ fn ort_platform_info(
             base.clone(),
             format!("{base}/lib/libonnxruntime.so.{ORT_VERSION}"),
             "libonnxruntime.so",
+            ORT_VERSION,
         ))
     }
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
@@ -609,6 +617,7 @@ fn ort_platform_info(
             base.clone(),
             format!("{base}/lib/libonnxruntime.{ORT_VERSION}.dylib"),
             "libonnxruntime.dylib",
+            ORT_VERSION,
         ))
     }
     #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
@@ -616,12 +625,14 @@ fn ort_platform_info(
         if !matches!(ep, OnnxExecutionProvider::Cpu) {
             anyhow::bail!("Only CPU execution provider is supported on macOS x86_64");
         }
-        let base = format!("onnxruntime-osx-x86_64-{ORT_VERSION}");
+        let ver = ORT_VERSION_MACOS_X86;
+        let base = format!("onnxruntime-osx-x86_64-{ver}");
         Ok((
             "tgz",
             base.clone(),
-            format!("{base}/lib/libonnxruntime.{ORT_VERSION}.dylib"),
+            format!("{base}/lib/libonnxruntime.{ver}.dylib"),
             "libonnxruntime.dylib",
+            ORT_VERSION_MACOS_X86,
         ))
     }
     #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
@@ -645,7 +656,7 @@ fn ort_platform_info(
         // Internal paths inside the zip always use the plain gpu suffix (no _cuda13).
         let internal_base = format!("onnxruntime-win-x64{gpu_suffix}-{ORT_VERSION}");
         let entry = format!("{internal_base}/lib/onnxruntime.dll");
-        Ok(("zip", archive_name, entry, "onnxruntime.dll"))
+        Ok(("zip", archive_name, entry, "onnxruntime.dll", ORT_VERSION))
     }
     #[cfg(not(any(
         all(target_os = "linux", target_arch = "x86_64"),
@@ -945,7 +956,7 @@ pub async fn ensure_ort_library_for_ep(ep: OnnxExecutionProvider) -> Result<Path
     }
 
     // Standard path: download from GitHub releases
-    let (ext, archive_name, lib_path_in_archive, local_lib_name) = ort_platform_info(ep)?;
+    let (ext, archive_name, lib_path_in_archive, local_lib_name, ort_version) = ort_platform_info(ep)?;
     let is_gpu = ep != OnnxExecutionProvider::Cpu;
 
     let archive_filename = if ext == "tgz" {
@@ -954,10 +965,10 @@ pub async fn ensure_ort_library_for_ep(ep: OnnxExecutionProvider) -> Result<Path
         format!("{archive_name}.zip")
     };
     let url = format!(
-        "https://github.com/microsoft/onnxruntime/releases/download/v{ORT_VERSION}/{archive_filename}"
+        "https://github.com/microsoft/onnxruntime/releases/download/v{ort_version}/{archive_filename}"
     );
 
-    eprintln!("Downloading ONNX Runtime v{ORT_VERSION} ({ep})...");
+    eprintln!("Downloading ONNX Runtime v{ort_version} ({ep})...");
     eprintln!("  {url}");
 
     crate::init_tls();
@@ -1001,7 +1012,7 @@ pub async fn ensure_ort_library_for_ep(ep: OnnxExecutionProvider) -> Result<Path
     }
 
     eprintln!(
-        "ONNX Runtime v{ORT_VERSION} installed to {}",
+        "ONNX Runtime v{ort_version} installed to {}",
         lib_dir.display()
     );
     Ok(target_path)

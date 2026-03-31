@@ -170,6 +170,28 @@ impl<'a> CompactResult<'a> {
     }
 }
 
+/// Maximum character length for a single chunk's content in CLI output.
+/// Chunks exceeding this limit are truncated with a marker.
+const MAX_CONTENT_CHARS: usize = 4_000;
+
+/// Truncate content to `MAX_CONTENT_CHARS`, appending a marker if truncated.
+fn truncate_content(content: &str) -> std::borrow::Cow<'_, str> {
+    if content.len() <= MAX_CONTENT_CHARS {
+        return std::borrow::Cow::Borrowed(content);
+    }
+    let end = content
+        .char_indices()
+        .take_while(|(i, _)| *i < MAX_CONTENT_CHARS)
+        .last()
+        .map(|(i, c)| i + c.len_utf8())
+        .unwrap_or(0);
+    // Try to break at a line boundary for cleaner output.
+    let break_at = content[..end].rfind('\n').unwrap_or(end);
+    let mut truncated = content[..break_at].to_string();
+    truncated.push_str("\n[...truncated]");
+    std::borrow::Cow::Owned(truncated)
+}
+
 /// Output search results.
 ///
 /// Priority: `--json` compact JSON > `--raw` verbose > default markdown codeblocks.
@@ -225,8 +247,9 @@ pub fn output_results(results: &[vera_core::types::SearchResult], json_output: b
                 info.push_str(&format!(" {stype}:{name}"));
             }
             println!("```{info}");
-            print!("{}", r.content);
-            if !r.content.ends_with('\n') {
+            let content = truncate_content(&r.content);
+            print!("{}", content);
+            if !content.ends_with('\n') {
                 println!();
             }
             println!("```");

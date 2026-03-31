@@ -31,12 +31,36 @@ def package_version() -> str:
         raise
 
 
+def _detect_musl() -> bool:
+    if platform.system().lower() != "linux":
+        return False
+    try:
+        result = subprocess.run(
+            ["ldd", "--version"], capture_output=True, text=True, check=False,
+        )
+        combined = (result.stdout or "") + (result.stderr or "")
+        if "musl" in combined.lower():
+            return True
+    except FileNotFoundError:
+        pass
+    try:
+        return any(e.startswith("ld-musl-") for e in os.listdir("/lib"))
+    except OSError:
+        return False
+
+
 def resolve_target() -> str:
+    override = os.environ.get("VERA_TARGET")
+    if override:
+        return override
+
     system = platform.system().lower()
     machine = platform.machine().lower()
+
+    linux_x86 = "x86_64-unknown-linux-musl" if _detect_musl() else "x86_64-unknown-linux-gnu"
     targets = {
-        ("linux", "x86_64"): "x86_64-unknown-linux-gnu",
-        ("linux", "amd64"): "x86_64-unknown-linux-gnu",
+        ("linux", "x86_64"): linux_x86,
+        ("linux", "amd64"): linux_x86,
         ("linux", "aarch64"): "aarch64-unknown-linux-gnu",
         ("linux", "arm64"): "aarch64-unknown-linux-gnu",
         ("darwin", "x86_64"): "x86_64-apple-darwin",
@@ -104,6 +128,7 @@ def write_install_metadata(
     install_method: str | None,
     version_value: str | None,
     binary_path: Path | None,
+    target: str | None = None,
 ) -> None:
     path = install_metadata_path()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -112,6 +137,7 @@ def write_install_metadata(
         "install_method": install_method or current.get("install_method"),
         "version": version_value or current.get("version"),
         "binary_path": str(binary_path) if binary_path is not None else current.get("binary_path"),
+        "target": target or current.get("target"),
     }
     tmp_path = path.with_suffix(f".tmp.{os.getpid()}")
     tmp_path.write_text(f"{json.dumps(payload, indent=2)}\n", encoding="utf-8")
@@ -228,6 +254,7 @@ def ensure_binary_installed() -> tuple[Path, str]:
             install_method=detect_wrapper_install_method(),
             version_value=version_value,
             binary_path=binary_path,
+            target=target,
         )
         return binary_path, version_value
 
@@ -260,6 +287,7 @@ def ensure_binary_installed() -> tuple[Path, str]:
         install_method=detect_wrapper_install_method(),
         version_value=version_value,
         binary_path=binary_path,
+        target=target,
     )
     return binary_path, version_value
 

@@ -95,13 +95,17 @@ fn run_wizard() -> anyhow::Result<()> {
         .is_local()
         .then(LocalEmbeddingModelConfig::default);
 
-    configure_backend(
-        effective_backend,
-        local_embedding_model,
-        None,
-        false,
-        "Backend configured.",
-    )?;
+    if effective_backend == InferenceBackend::Api {
+        configure_api_interactive()?;
+    } else {
+        configure_backend(
+            effective_backend,
+            local_embedding_model,
+            None,
+            false,
+            "Backend configured.",
+        )?;
+    }
 
     // Step 2: Agent skill installation
     cliclack::log::step("Step 2: Agent skills")?;
@@ -429,6 +433,156 @@ fn confirm(
     msg.push('?');
     let yes: bool = cliclack::confirm(msg).interact()?;
     Ok(yes)
+}
+
+/// Interactive API configuration for the setup wizard.
+/// Offers common provider presets and prompts for credentials.
+fn configure_api_interactive() -> anyhow::Result<()> {
+    #[derive(Clone)]
+    struct ApiPreset {
+        label: &'static str,
+        hint: &'static str,
+        embedding_base_url: &'static str,
+        embedding_model: &'static str,
+        reranker_base_url: &'static str,
+        reranker_model: &'static str,
+    }
+
+    let presets = [
+        ApiPreset {
+            label: "OpenAI",
+            hint: "text-embedding-3-small, no built-in reranker",
+            embedding_base_url: "https://api.openai.com/v1",
+            embedding_model: "text-embedding-3-small",
+            reranker_base_url: "",
+            reranker_model: "",
+        },
+        ApiPreset {
+            label: "Jina AI",
+            hint: "jina-embeddings-v3 + jina-reranker-v2",
+            embedding_base_url: "https://api.jina.ai/v1",
+            embedding_model: "jina-embeddings-v3",
+            reranker_base_url: "https://api.jina.ai/v1",
+            reranker_model: "jina-reranker-v2-base-multilingual",
+        },
+        ApiPreset {
+            label: "Voyage AI",
+            hint: "voyage-code-3 + rerank-2",
+            embedding_base_url: "https://api.voyageai.com/v1",
+            embedding_model: "voyage-code-3",
+            reranker_base_url: "https://api.voyageai.com/v1",
+            reranker_model: "rerank-2",
+        },
+        ApiPreset {
+            label: "Custom",
+            hint: "enter your own OpenAI-compatible endpoints",
+            embedding_base_url: "",
+            embedding_model: "",
+            reranker_base_url: "",
+            reranker_model: "",
+        },
+    ];
+
+    let mut select = cliclack::select("Select an API provider");
+    for (i, p) in presets.iter().enumerate() {
+        select = select.item(i, p.label, p.hint);
+    }
+    let choice: usize = select.interact()?;
+    let preset = &presets[choice];
+
+    // Embedding base URL
+    let embedding_base_url: String = if preset.embedding_base_url.is_empty() {
+        cliclack::input("Embedding API base URL")
+            .placeholder("https://api.openai.com/v1")
+            .interact()?
+    } else {
+        let url: String = cliclack::input("Embedding API base URL")
+            .default_input(preset.embedding_base_url)
+            .interact()?;
+        url
+    };
+
+    // Embedding model
+    let embedding_model: String = if preset.embedding_model.is_empty() {
+        cliclack::input("Embedding model ID")
+            .placeholder("text-embedding-3-small")
+            .interact()?
+    } else {
+        cliclack::input("Embedding model ID")
+            .default_input(preset.embedding_model)
+            .interact()?
+    };
+
+    // Embedding API key
+    let embedding_api_key: String = cliclack::password("Embedding API key")
+        .mask('▪')
+        .interact()?;
+    if embedding_api_key.is_empty() {
+        bail!("embedding API key is required");
+    }
+
+    let embedding = ApiSetupInput {
+        base_url: embedding_base_url,
+        model_id: embedding_model,
+        api_key: embedding_api_key.clone(),
+    };
+
+    // Reranker (optional)
+    let setup_reranker: bool = cliclack::confirm("Configure a reranker? (improves search precision)")
+        .initial_value(!preset.reranker_base_url.is_empty())
+        .interact()?;
+
+    let reranker = if setup_reranker {
+        let reranker_base_url: String = if preset.reranker_base_url.is_empty() {
+            cliclack::input("Reranker API base URL")
+                .placeholder("https://api.jina.ai/v1")
+                .interact()?
+        } else {
+            cliclack::input("Reranker API base URL")
+                .default_input(preset.reranker_base_url)
+                .interact()?
+        };
+
+        let reranker_model: String = if preset.reranker_model.is_empty() {
+            cliclack::input("Reranker model ID")
+                .placeholder("jina-reranker-v2-base-multilingual")
+                .interact()?
+        } else {
+            cliclack::input("Reranker model ID")
+                .default_input(preset.reranker_model)
+                .interact()?
+        };
+
+        let reranker_api_key: String = cliclack::password("Reranker API key (Enter to reuse embedding key)")
+            .mask('▪')
+            .interact()?;
+        let reranker_api_key = if reranker_api_key.is_empty() {
+            embedding_api_key
+        } else {
+            reranker_api_key
+        };
+
+        Some(ApiSetupInput {
+            base_url: reranker_base_url,
+            model_id: reranker_model,
+            api_key: reranker_api_key,
+        })
+    } else {
+        None
+    };
+
+    state::save_backend(InferenceBackend::Api)?;
+    state::save_api_setup(&embedding, reranker.as_ref())?;
+    state::apply_saved_env_force()?;
+
+    if state::load_saved_config()?.install_method.is_none() {
+        if let Some(install_method) = crate::update_check::resolve_install_method().install_method {
+            state::save_install_method(Some(&install_method))?;
+        }
+    }
+
+    cliclack::log::success("API backend configured.")?;
+    Ok(())
 }
 
 fn read_required_api_env(
