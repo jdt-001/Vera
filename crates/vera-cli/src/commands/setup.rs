@@ -589,7 +589,7 @@ fn configure_api_interactive() -> anyhow::Result<()> {
 
     cliclack::log::success("API backend configured.")?;
     cliclack::log::info(
-        "Your credentials are saved in ~/.vera/. You can remove any \
+        "Your credentials are saved in Vera's config directory. You can remove any \
          EMBEDDING_MODEL_* / RERANKER_MODEL_* env vars from your shell.",
     )?;
     Ok(())

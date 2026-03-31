@@ -1,6 +1,6 @@
 # Local Models
 
-Vera's local pipeline uses one embedding model plus the curated local reranker. `vera setup` downloads the selected embedding model into `~/.vera/models/` when the source is Hugging Face, and always installs the matching ONNX Runtime library into `~/.vera/lib/`.
+Vera's local pipeline uses one embedding model plus the curated local reranker. `vera setup` downloads the selected embedding model into the Vera data directory (`$XDG_DATA_HOME/vera/models/`, or `~/.vera/models/` on existing installs) when the source is Hugging Face, and always installs the matching ONNX Runtime library into the `lib/` subdirectory.
 
 ## Curated Embedding Options
 

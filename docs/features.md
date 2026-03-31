@@ -218,7 +218,7 @@ During setup, Vera offers to add a usage snippet to your project's agent config 
 
 ### Uninstalling
 
-`vera uninstall` removes `~/.vera/` (binary, models, ONNX Runtime libs, config), agent skill files, and the PATH shim. Per-project indexes (`.vera/` in each project) are left in place.
+`vera uninstall` removes Vera's data directory (models, ONNX Runtime libs, config), agent skill files, and the PATH shim. Per-project indexes (`.vera/` in each project) are left in place.
 
 ### Cross-Platform
 

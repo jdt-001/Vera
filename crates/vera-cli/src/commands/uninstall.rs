@@ -56,14 +56,14 @@ pub fn run(json_output: bool) -> Result<()> {
     }
     removed.push("agent skills");
 
-    // 2. Remove ~/.vera/ (binary cache, models, libs, config, credentials).
+    // 2. Remove Vera data directory (binary cache, models, libs, config, credentials).
     if vera_home.exists() {
         fs::remove_dir_all(&vera_home)?;
         if !json_output {
             eprintln!("  Removed {}", vera_home.display());
         }
     }
-    removed.push("~/.vera");
+    removed.push("vera data dir");
 
     // 3. Remove the PATH shim.
     let name = shim_name();

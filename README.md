@@ -166,7 +166,7 @@ vera agent sync                    # refresh stale skill installs
 vera agent remove                  # pick installs to remove
 
 # Cleanup
-vera uninstall                     # removes ~/.vera/, skill files, PATH shim
+vera uninstall                     # removes config dir, skill files, PATH shim
 ```
 
 </details>
@@ -189,7 +189,7 @@ Vera respects `.gitignore` by default. Create a `.veraignore` file (gitignore sy
 
 ## Model Backend
 
-Vera itself is always local: the index lives in `.vera/`, config in `~/.vera/`. The backend choice only affects where embeddings and reranking run.
+Vera itself is always local: the index lives in `.vera/` per project, config and models in `$XDG_DATA_HOME/vera` (or `~/.vera` for existing installs). The backend choice only affects where embeddings and reranking run.
 
 `vera setup` downloads two curated ONNX models and auto-detects your GPU. GPU is recommended; CPU works but is slow for initial indexing. After the first index, `vera update .` only re-embeds changed files, so updates are fast even on CPU.
 

@@ -417,7 +417,11 @@ pub fn ensure_ort_runtime(lib_path: Option<&std::path::Path>) -> Result<()> {
 
 /// Return Vera's home directory.
 ///
-/// Uses `VERA_HOME` when set, otherwise defaults to `~/.vera`.
+/// Resolution order:
+/// 1. `VERA_HOME` env var (explicit override)
+/// 2. `~/.vera` if it already exists (backward compatibility)
+/// 3. `$XDG_DATA_HOME/vera` (XDG standard, defaults to `~/.local/share/vera`)
+/// 4. `~/.vera` as final fallback
 pub fn vera_home_dir() -> Result<PathBuf> {
     if let Ok(path) = std::env::var("VERA_HOME") {
         if !path.trim().is_empty() {
@@ -425,9 +429,17 @@ pub fn vera_home_dir() -> Result<PathBuf> {
         }
     }
 
-    Ok(dirs::home_dir()
-        .context("Could not find home directory")?
-        .join(".vera"))
+    let home = dirs::home_dir().context("Could not find home directory")?;
+    let legacy = home.join(".vera");
+    if legacy.exists() {
+        return Ok(legacy);
+    }
+
+    if let Some(data) = dirs::data_dir() {
+        return Ok(data.join("vera"));
+    }
+
+    Ok(legacy)
 }
 
 /// Get the platform-specific ONNX Runtime shared library filename.

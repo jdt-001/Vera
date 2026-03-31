@@ -65,7 +65,7 @@ Large candidate sets are batched automatically to stay within the reranker's req
 Everything lives in two places:
 
 - **`.vera/`** in the project root. SQLite database with chunk metadata, Tantivy BM25 index, and sqlite-vec vector store. One directory per project.
-- **`~/.vera/models/`**: cached ONNX models (only in local mode). Downloaded once by `vera setup`.
+- **`$XDG_DATA_HOME/vera/models/`** (or `~/.vera/models/` on existing installs): cached ONNX models (only in local mode). Downloaded once by `vera setup`.
 
 The index is a single SQLite database file plus a Tantivy directory. No external services, no daemons, no background processes.
 

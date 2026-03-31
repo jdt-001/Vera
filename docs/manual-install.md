@@ -15,17 +15,19 @@ If you want the optional CodeRankEmbed preset instead of Jina embeddings, downlo
 - [`Zenabius/CodeRankEmbed-onnx`](https://huggingface.co/Zenabius/CodeRankEmbed-onnx)
 - [`jinaai/jina-reranker-v2-base-multilingual`](https://huggingface.co/jinaai/jina-reranker-v2-base-multilingual)
 
-## 2. Place Them Under `~/.vera/`
+## 2. Place Them In Vera's Data Directory
 
-Vera looks for these paths by default:
+Vera stores models and libraries in `$XDG_DATA_HOME/vera/` (defaults to `~/.local/share/vera/` on Linux, `~/Library/Application Support/vera/` on macOS). Existing installs using `~/.vera/` continue to work. Set `VERA_HOME` to override.
+
+Default paths:
 
 | Asset | Destination |
 | --- | --- |
-| ONNX Runtime CPU | `~/.vera/lib/` |
-| ONNX Runtime GPU backend | `~/.vera/lib/<backend>/` such as `~/.vera/lib/cuda/` |
-| Jina embeddings | `~/.vera/models/jinaai/jina-embeddings-v5-text-nano-retrieval/` |
-| CodeRankEmbed | `~/.vera/models/Zenabius/CodeRankEmbed-onnx/` |
-| Local reranker | `~/.vera/models/jinaai/jina-reranker-v2-base-multilingual/` |
+| ONNX Runtime CPU | `<vera-data>/lib/` |
+| ONNX Runtime GPU backend | `<vera-data>/lib/<backend>/` such as `<vera-data>/lib/cuda/` |
+| Jina embeddings | `<vera-data>/models/jinaai/jina-embeddings-v5-text-nano-retrieval/` |
+| CodeRankEmbed | `<vera-data>/models/Zenabius/CodeRankEmbed-onnx/` |
+| Local reranker | `<vera-data>/models/jinaai/jina-reranker-v2-base-multilingual/` |
 
 Expected filenames for the curated presets:
 
@@ -35,7 +37,7 @@ Expected filenames for the curated presets:
 | CodeRankEmbed | `onnx/model_quantized.onnx`, `tokenizer.json` |
 | Jina reranker | `onnx/model_quantized.onnx`, `tokenizer.json` |
 
-If you want to keep a custom embedding model somewhere else, skip copying it into `~/.vera/models/` and point Vera at it directly with `vera setup --embedding-dir /path/to/model-dir`.
+If you want to keep a custom embedding model somewhere else, skip copying it into the models directory and point Vera at it directly with `vera setup --embedding-dir /path/to/model-dir`.
 
 ## 3. Re-run Setup Or Repair
 
@@ -56,7 +58,7 @@ vera doctor --probe
 
 ## Notes
 
-- Set `VERA_HOME` if you want Vera to use a different base directory than `~/.vera`.
+- Set `VERA_HOME` to override the data directory location. Run `vera config` to see the active path.
 - Set `ORT_DYLIB_PATH` if you installed ONNX Runtime somewhere else and want Vera to use that exact shared library.
 - On Windows CUDA 13, the ONNX Runtime archive name and the folder inside the archive do not match. Current Vera releases handle that layout correctly.
 - On Windows CUDA, `vera setup --onnx-jina-cuda` and `vera repair --onnx-jina-cuda` refresh the downloaded runtime using the installed toolkit version from `CUDA_PATH` or `nvcc --version`. If you switch between CUDA 12 and CUDA 13 toolkits, rerun one of those commands.
