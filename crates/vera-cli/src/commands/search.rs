@@ -15,6 +15,7 @@ pub fn run(
     raw: bool,
     timing: bool,
     deep: bool,
+    compact: bool,
     backend: InferenceBackend,
 ) -> anyhow::Result<()> {
     let mut config = load_runtime_config()?;
@@ -53,7 +54,13 @@ pub fn run(
         )?
     };
 
-    output_results(&results, json_output, raw, config.retrieval.max_output_chars);
+    output_results(
+        &results,
+        json_output,
+        raw,
+        compact,
+        config.retrieval.max_output_chars,
+    );
 
     if timing {
         use std::io::Write;

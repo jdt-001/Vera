@@ -378,6 +378,13 @@ enum Commands {
         #[arg(long)]
         deep: bool,
 
+        /// Show only function/class signatures (omit bodies).
+        ///
+        /// Useful for broad exploration: fits more results in fewer tokens.
+        /// Use default mode for targeted retrieval of full implementations.
+        #[arg(long)]
+        compact: bool,
+
         #[command(flatten)]
         backend: helpers::LocalBackendFlags,
     },
@@ -497,6 +504,10 @@ enum Commands {
         /// Include generated or minified files such as dist bundles.
         #[arg(long)]
         include_generated: bool,
+
+        /// Show only function/class signatures (omit bodies).
+        #[arg(long)]
+        compact: bool,
     },
 
     /// Find symbols with no callers (potential dead code).
@@ -714,6 +725,7 @@ fn main() {
             scope,
             include_generated,
             deep,
+            compact,
             backend,
         } => {
             tracing::info!(query = %query, deep, "searching");
@@ -732,6 +744,7 @@ fn main() {
                 cli.raw,
                 cli.timing,
                 deep,
+                compact,
                 backend.resolve(),
             )
         }
@@ -767,6 +780,7 @@ fn main() {
             context,
             scope,
             include_generated,
+            compact,
         } => {
             tracing::info!(pattern = %pattern, "grep");
             let filters = vera_core::types::SearchFilters {
@@ -782,6 +796,7 @@ fn main() {
                 &filters,
                 cli.json,
                 cli.raw,
+                compact,
             )
         }
         Commands::DeadCode => {

@@ -52,22 +52,48 @@ fn truncate_to_budget(content: &str, allowed: usize) -> std::borrow::Cow<'_, str
 }
 
 /// Serialize search results as compact JSON, applying a total character budget.
+/// When `signatures_only` is true, function/class bodies are stripped before output.
 fn compact_results_json(
     results: &[vera_core::types::SearchResult],
     budget: usize,
+    signatures_only: bool,
 ) -> Result<String, serde_json::Error> {
+    use vera_core::parsing::signatures::extract_signature;
+
+    let signatures: Vec<String> = if signatures_only {
+        results
+            .iter()
+            .map(|r| extract_signature(&r.content, r.language))
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    // Build a parallel vec of display content (signature or original).
+    let display: Vec<&str> = results
+        .iter()
+        .enumerate()
+        .map(|(i, r)| {
+            if signatures_only {
+                signatures[i].as_str()
+            } else {
+                r.content.as_str()
+            }
+        })
+        .collect();
+
     let mut remaining = budget;
     let mut compact: Vec<CompactResult> = Vec::with_capacity(results.len());
-    for r in results {
+    for (i, r) in results.iter().enumerate() {
         if budget > 0 && remaining == 0 {
             break;
         }
         let content = if budget > 0 {
-            let c = truncate_to_budget(&r.content, remaining);
+            let c = truncate_to_budget(display[i], remaining);
             remaining = remaining.saturating_sub(c.len());
             c
         } else {
-            std::borrow::Cow::Borrowed(r.content.as_str())
+            std::borrow::Cow::Borrowed(display[i])
         };
         compact.push(CompactResult {
             file_path: &r.file_path,
@@ -140,6 +166,10 @@ pub fn tool_definitions() -> Vec<ToolDefinition> {
                     "limit": {
                         "type": "integer",
                         "description": "Maximum number of results (default: 5)"
+                    },
+                    "compact": {
+                        "type": "boolean",
+                        "description": "Return only function/class signatures (omit bodies). Use for broad exploration; fits more results in fewer tokens."
                     }
                 },
                 "required": []
@@ -214,6 +244,10 @@ pub fn tool_definitions() -> Vec<ToolDefinition> {
                     "include_generated": {
                         "type": "boolean",
                         "description": "Include generated or minified files such as dist bundles."
+                    },
+                    "compact": {
+                        "type": "boolean",
+                        "description": "Return only function/class signatures (omit bodies). Use for broad exploration."
                     }
                 },
                 "required": ["pattern"]
@@ -361,7 +395,12 @@ fn handle_search_code(args: &Value) -> ToolCallResult {
     all_results.retain(|r| seen.insert(format!("{}:{}:{}", r.file_path, r.line_start, r.line_end)));
     all_results.truncate(result_limit);
 
-    match compact_results_json(&all_results, MCP_OUTPUT_BUDGET) {
+    let signatures_only = args
+        .get("compact")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    match compact_results_json(&all_results, MCP_OUTPUT_BUDGET, signatures_only) {
         Ok(json) => ToolCallResult::success(json),
         Err(e) => ToolCallResult::error(format!("Failed to serialize results: {e}")),
     }
@@ -500,10 +539,15 @@ fn handle_regex_search(args: &Value) -> ToolCallResult {
         context,
         &filters,
     ) {
-        Ok(results) => match compact_results_json(&results, MCP_OUTPUT_BUDGET) {
+        Ok(results) => {
+            let signatures_only = args
+                .get("compact")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            match compact_results_json(&results, MCP_OUTPUT_BUDGET, signatures_only) {
             Ok(json) => ToolCallResult::success(json),
             Err(e) => ToolCallResult::error(format!("Failed to serialize results: {e}")),
-        },
+        }},
         Err(e) => ToolCallResult::error(format!("Regex search failed: {e}")),
     }
 }

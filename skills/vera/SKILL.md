@@ -22,6 +22,7 @@ Semantic code search CLI. Combines BM25 keyword matching with vector similarity 
    vera search "keybind handling" --scope docs
    vera search "mod loader" --scope runtime --include-generated
    vera search "config loading" --deep    # multi-hop: follows symbols from initial results
+   vera search "auth" --compact            # signatures only: broad exploration in fewer tokens
    ```
 7. Regex search (exact patterns, imports, TODOs):
    ```sh
@@ -67,6 +68,7 @@ The info string contains `file_path:line_start-line_end` and optional `symbol_ty
 - Vera favors source files by default. Use `--scope docs` for prose and ADRs, `--scope runtime` for extracted bundles, and `--include-generated` for minified/dist artifacts.
 - After code changes mid-session, run `vera update .` before searching again (or use `vera watch .` to auto-update).
 - Use `vera search --deep` when initial results need broader context (follows symbols from first results).
+- Use `--compact` for broad exploration ("what functions handle auth?", "where is config loaded?"). Use default mode for targeted retrieval ("how does BM25 scoring work?").
 
 ## Failure Recovery
 

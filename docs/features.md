@@ -31,6 +31,10 @@ An optional `intent` parameter lets you describe your higher-level goal separate
 
 `vera search "query" --deep` runs an initial search, extracts symbol names from the top results, then automatically searches for those symbols to find related code. This follows the call chain outward from your initial results without manual follow-up queries.
 
+### Compact Mode
+
+`vera search "query" --compact` strips function and class bodies from results, returning only signatures (name, parameters, return type). This fits more results into fewer tokens, making it useful for broad exploration before drilling into specific implementations. Works with `vera grep` too. Falls back to the first 3 lines for languages or chunks where body stripping isn't applicable.
+
 ### Query-Aware Ranking
 
 A deterministic ranking stage between fusion and reranking handles cases that dense retrieval alone is bad at: exact filename queries, path-heavy config lookups, noisy test/docs matches, and broad natural-language queries that need structural results. It also pulls in related implementation blocks or same-file context when the initial hit is too narrow.

@@ -16,6 +16,7 @@ pub mod chunker;
 pub mod extractor;
 pub mod languages;
 pub mod references;
+pub mod signatures;
 
 use anyhow::{Context, Result};
 use tree_sitter::Parser;

@@ -192,18 +192,45 @@ fn truncate_to_budget(content: &str, allowed: usize) -> std::borrow::Cow<'_, str
 /// Priority: `--json` compact JSON > `--raw` verbose > default markdown codeblocks.
 /// When `budget` is non-zero, output is progressively truncated so the combined
 /// content stays within the budget. Lower-ranked results are truncated first.
+/// When `compact` is true, function/class bodies are stripped to show only signatures.
 pub fn output_results(
     results: &[vera_core::types::SearchResult],
     json_output: bool,
     raw: bool,
+    compact: bool,
     budget: usize,
 ) {
-    if json_output {
-        let compact: Vec<CompactResult> = results
+    use vera_core::parsing::signatures::extract_signature;
+
+    // When compact mode is on, pre-compute signature-only content for each result.
+    let compacted: Vec<String> = if compact {
+        results
             .iter()
-            .map(CompactResult::from_search_result)
+            .map(|r| extract_signature(&r.content, r.language))
+            .collect()
+    } else {
+        Vec::new()
+    };
+    // Helper: pick compacted or original content by index.
+    macro_rules! content_for {
+        ($i:expr, $r:expr) => {
+            if compact { compacted[$i].as_str() } else { $r.content.as_str() }
+        };
+    }
+
+    if json_output {
+        let json_results: Vec<CompactResult> = results
+            .iter()
+            .enumerate()
+            .map(|(i, r)| {
+                let mut cr = CompactResult::from_search_result(r);
+                if compact {
+                    cr.content = &compacted[i];
+                }
+                cr
+            })
             .collect();
-        let json = serde_json::to_string(&compact)
+        let json = serde_json::to_string(&json_results)
             .unwrap_or_else(|e| format!("{{\"error\": \"failed to serialize: {e}\"}}"));
         println!("{json}");
     } else if raw {
@@ -227,8 +254,8 @@ pub fn output_results(
                     }
                 }
                 println!("   score: {:.6}", result.score);
-                let preview: String = result
-                    .content
+                let display_content = content_for!(i, result);
+                let preview: String = display_content
                     .lines()
                     .take(3)
                     .map(|l| format!("   │ {l}"))
@@ -253,12 +280,13 @@ pub fn output_results(
                 info.push_str(&format!(" {stype}:{name}"));
             }
             println!("```{info}");
+            let base_content = content_for!(i, r);
             let content = if budget > 0 {
-                let c = truncate_to_budget(&r.content, remaining);
+                let c = truncate_to_budget(base_content, remaining);
                 remaining = remaining.saturating_sub(c.len());
                 c
             } else {
-                std::borrow::Cow::Borrowed(r.content.as_str())
+                std::borrow::Cow::Borrowed(base_content)
             };
             print!("{}", content);
             if !content.ends_with('\n') {

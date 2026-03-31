@@ -125,6 +125,7 @@ vera search "error handling" --lang rust
 vera search "routes" --path "src/**/*.ts"
 vera search "handler" --type function --limit 5
 vera search "config loading" --deep              # follows symbols from initial results
+vera search "auth" --compact                     # signatures only, broad exploration
 ```
 
 Update the index after code changes: `vera update .`

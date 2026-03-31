@@ -5,6 +5,7 @@ use anyhow::bail;
 use crate::helpers::{load_runtime_config, output_results};
 
 /// Run the `vera grep <pattern>` command.
+#[allow(clippy::too_many_arguments)]
 pub fn run(
     pattern: &str,
     limit: Option<usize>,
@@ -13,6 +14,7 @@ pub fn run(
     filters: &vera_core::types::SearchFilters,
     json_output: bool,
     raw: bool,
+    compact: bool,
 ) -> anyhow::Result<()> {
     let cwd = std::env::current_dir()
         .map_err(|e| anyhow::anyhow!("failed to get current directory: {e}"))?;
@@ -36,6 +38,12 @@ pub fn run(
     )?;
 
     let config = load_runtime_config()?;
-    output_results(&results, json_output, raw, config.retrieval.max_output_chars);
+    output_results(
+        &results,
+        json_output,
+        raw,
+        compact,
+        config.retrieval.max_output_chars,
+    );
     Ok(())
 }
