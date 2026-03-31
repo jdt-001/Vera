@@ -10,11 +10,12 @@ Semantic code search CLI. Combines BM25 keyword matching with vector similarity 
 ## Workflow
 
 1. Ensure Vera is installed and on `PATH` (add `.vera/` to `.gitignore` on first use). If missing: `references/install.md`.
-2. Index the repo: `vera index .` (first time) or `vera update .` (after edits).
-3. For long sessions, start the watcher to keep the index fresh automatically: `vera watch .` (runs in background until Ctrl-C). This replaces manual `vera update .` calls.
-4. Get oriented: `vera overview` returns a project summary (languages, directories, entry points, hotspots).
-5. Trace references: `vera references <symbol>` finds callers; add `--callees` to see what it calls. `vera dead-code` lists functions with no callers.
-6. Search:
+2. Configure exclusions: Vera respects `.gitignore` by default. To customize what gets indexed, create a `.veraignore` file (gitignore syntax). Add `#include .gitignore` at the top to layer your rules on top of gitignore. Use `--exclude` for one-off exclusions, `--no-ignore` to disable all ignore parsing, or `--verbose` during indexing to see which files are skipped.
+3. Index the repo: `vera index .` (first time) or `vera update .` (after edits). Use `vera index . --verbose` to debug exclusion rules.
+4. For long sessions, start the watcher: `vera watch .` (background process, Ctrl-C to stop, 2s debounce). This auto-updates the index on file changes and replaces manual `vera update .` calls.
+5. Get oriented: `vera overview` returns a project summary: language breakdown, directory structure, entry points, complexity hotspots, and detected conventions (frameworks, patterns, config files). Use this for onboarding before searching.
+6. Use `vera references <symbol>` to find callers; add `--callees` to see what it calls. `vera dead-code` lists functions with no callers.
+7. Search:
    ```sh
    vera search "authentication middleware"
    vera search "parse_config" --type function --limit 5
@@ -24,14 +25,15 @@ Semantic code search CLI. Combines BM25 keyword matching with vector similarity 
    vera search "config loading" --deep    # multi-hop: follows symbols from initial results
    vera search "auth" --compact            # signatures only: broad exploration in fewer tokens
    ```
-7. Regex search (exact patterns, imports, TODOs):
+8. Regex search (exact patterns, imports, TODOs). `vera grep` only searches indexed files, so `.veraignore` and exclusion rules apply:
    ```sh
    vera grep "fn\s+main"
-   vera grep "TODO|FIXME" -i
-   vera grep "keybind" --scope docs
-   vera grep "use std::collections" --context 0
+   vera grep "TODO|FIXME" -i              # case-insensitive
+   vera grep "keybind" --scope docs        # scoped to docs
+   vera grep "use std::collections" --context 0  # no surrounding lines
+   vera grep "handler" --compact           # signatures only
    ```
-8. Use the first results (they are ranked by relevance). Output is markdown codeblocks by default.
+9. Use the first results (they are ranked by relevance). Output is markdown codeblocks by default.
 
 ## Example Output
 
@@ -57,24 +59,41 @@ The info string contains `file_path:line_start-line_end` and optional `symbol_ty
 
 `vera search` understands synonyms and related concepts. `vera grep` matches literal patterns.
 
+## Search Scopes
+
+| Scope | What it includes |
+|-------|------------------|
+| `source` | Application source code (default bias) |
+| `docs` | Markdown, READMEs, ADRs, guides |
+| `runtime` | Extracted runtime trees, bundled app code |
+| `all` | Everything, no filtering |
+
+Vera favors source files by default. Use `--scope docs` for prose and ADRs, `--scope runtime` for extracted bundles, and `--include-generated` for minified/dist artifacts.
+
+## Search Modes
+
+- **Default**: full results with code bodies. Best for targeted retrieval ("how does BM25 scoring work?").
+- **`--deep`**: multi-hop search. Runs an initial search, extracts symbol names from top results, then searches for those symbols automatically. Use when initial results need broader context.
+- **`--compact`**: signatures only (name, parameters, return type). Fits more results into fewer tokens. Best for broad exploration ("what functions handle auth?"). Works with `vera grep` too.
+
 ## Query Strategy
 
 - Describe behavior or intent: "JWT token validation", "request rate limiting", not "code" or "utils".
 - Avoid overly broad queries like "authentication" or "tools". Be specific about what aspect you need.
 - Match your intent to the query: for documentation, use doc-focused keywords ("setup guide", "configuration README"); for code, use implementation terms ("token refresh logic", "error handling implementation").
-- Use 2-3 varied queries to capture different aspects (e.g., "OAuth token refresh", "JWT expiry handling", "auth middleware").
+- Use 2-3 varied queries to capture different aspects (e.g., "OAuth token refresh", "JWT expiry handling", "auth middleware"). Results are deduplicated and reranked together.
+- Add an `intent` parameter to describe your higher-level goal when the query alone is ambiguous (e.g., query: "config", intent: "find where database connection strings are loaded from environment variables").
 - For known symbol names, search the exact name: `vera search "parse_config"`.
 - Start broad, then narrow with `--lang`, `--path`, `--type`, `--limit`.
-- Vera favors source files by default. Use `--scope docs` for prose and ADRs, `--scope runtime` for extracted bundles, and `--include-generated` for minified/dist artifacts.
 - After code changes mid-session, run `vera update .` before searching again (or use `vera watch .` to auto-update).
-- Use `vera search --deep` when initial results need broader context (follows symbols from first results).
-- Use `--compact` for broad exploration ("what functions handle auth?", "where is config loaded?"). Use default mode for targeted retrieval ("how does BM25 scoring work?").
 
 ## Failure Recovery
 
 - `no index found` → `vera index .`
 - stale results after edits → `vera update .`
-- local model/ONNX fails → `vera doctor`, then `references/troubleshooting.md`
+- local model/ONNX fails → `vera doctor --probe`, then `references/troubleshooting.md`
+- missing local assets → `vera repair`
+- switch GPU/model backend → `vera backend`
 - API credentials missing → `references/install.md`
 - MCP requested → `references/mcp.md`
 

@@ -53,6 +53,22 @@ Supported clients: `agents` (universal), `amp`, `antigravity`, `augment`, `claud
 
 The `agents` client writes to the cross-agent `.agents/skills/` directory, which is the open Agent Skills spec supported by most modern coding agents.
 
+## Upgrading
+
+```sh
+vera upgrade              # show update plan
+vera upgrade --apply      # execute upgrade (auto-syncs stale agent skill installs)
+vera agent sync           # manually sync skill files to match current binary version
+```
+
+## Uninstalling
+
+```sh
+vera uninstall            # removes data dir, agent skills, PATH shim
+```
+
+Per-project indexes (`.vera/` in each project) are left in place.
+
 ## Diagnostics
 
 ```sh

@@ -46,8 +46,14 @@ Helpful commands:
 ```sh
 vera setup                        # re-download models + ORT (CPU)
 vera setup --onnx-jina-cuda       # re-download with CUDA ORT
-vera doctor
+vera doctor                       # basic health check
+vera doctor --probe               # deeper ONNX session check
+vera doctor --json                # machine-readable diagnostics
+vera repair                       # re-fetch missing local assets without full setup
+vera backend                      # switch GPU/model backend without re-running setup
 ```
+
+On constrained GPUs, pass `--low-vram` to `vera index` to force conservative batch settings.
 
 ## API Mode Fails
 
@@ -78,3 +84,13 @@ Try one of these:
 ## Exact Match Requested
 
 Do not force Vera for exact text search. Use `rg`.
+
+## Debugging Exclusion Rules
+
+If unexpected files are indexed or missing from results:
+
+```sh
+vera index . --verbose            # shows which files are skipped and why
+```
+
+Check `.veraignore` syntax (gitignore format). Remember: `.veraignore` replaces `.gitignore` rules unless you add `#include .gitignore` at the top to merge both.
