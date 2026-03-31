@@ -89,7 +89,15 @@ jobs:
 
       - name: Install musl tools
         if: matrix.musl
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
+        shell: bash
+        run: |
+          sudo apt-get update && sudo apt-get install -y musl-tools
+          # esaxx-rs (tokenizers dep) needs a C++ compiler for musl target.
+          # musl-tools only provides musl-gcc; create a musl-g++ wrapper that
+          # invokes g++ with the musl libc spec so cc-rs can find it.
+          sudo ln -s /usr/bin/g++ /usr/local/bin/x86_64-linux-musl-g++
+          echo "CC_x86_64_unknown_linux_musl=musl-gcc" >> "$GITHUB_ENV"
+          echo "CXX_x86_64_unknown_linux_musl=g++" >> "$GITHUB_ENV"
 
       - name: Set MSVC CRT flags
         if: runner.os == 'Windows'
