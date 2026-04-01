@@ -38,7 +38,8 @@ bunx @vera-ai/cli install   # or: npx -y @vera-ai/cli install / uvx vera-ai inst
 
 **2. Set up models** (pick one)
 ```bash
-vera setup --api                 # API mode: works everywhere, no GPU needed (recommended)
+vera setup --api                 # API mode: works everywhere, no GPU needed, use any local inference engine (llama.cpp, etc) or provider
+# API mode is simplest, and easiest to get working. Below options download ONNX runtime + models for local inference
 vera setup --onnx-jina-coreml    # Apple Silicon (M1/M2/M3/M4)
 vera setup --onnx-jina-cuda      # NVIDIA GPU
 vera setup                       # Interactive wizard
