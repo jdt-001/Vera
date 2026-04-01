@@ -18,8 +18,8 @@ pub mod vector;
 
 pub use bm25::{search_bm25, search_bm25_with_stores};
 pub use hybrid::{
-    HybridSearchError, HybridTimings, fuse_rrf, fuse_rrf_multi, search_hybrid,
-    search_hybrid_reranked,
+    HybridSearchError, HybridTimings, fuse_rrf, fuse_rrf_multi, fuse_rrf_multi_weighted,
+    search_hybrid, search_hybrid_reranked,
 };
 pub use reranker::{
     ApiReranker, RerankScore, Reranker, RerankerConfig, RerankerError, rerank_results,

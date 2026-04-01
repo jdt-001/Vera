@@ -235,12 +235,27 @@ pub fn fuse_rrf_multi(
     rrf_k: f64,
     limit: usize,
 ) -> Vec<SearchResult> {
+    let weights = vec![1.0; result_sets.len()];
+    fuse_rrf_multi_weighted(result_sets, &weights, rrf_k, limit)
+}
+
+/// Fuse multiple ranked result lists with weighted reciprocal rank fusion.
+///
+/// Each result set has an associated weight that scales its RRF contribution.
+/// A weight of 2.0 means that set's scores count double in the final ranking.
+pub fn fuse_rrf_multi_weighted(
+    result_sets: &[&[SearchResult]],
+    weights: &[f64],
+    rrf_k: f64,
+    limit: usize,
+) -> Vec<SearchResult> {
     let mut fused: HashMap<String, (f64, SearchResult)> = HashMap::new();
 
-    for result_set in result_sets {
+    for (set_idx, result_set) in result_sets.iter().enumerate() {
+        let weight = weights.get(set_idx).copied().unwrap_or(1.0);
         for (rank_0, result) in result_set.iter().enumerate() {
             let key = result_key(result);
-            let rrf_score = 1.0 / (rrf_k + (rank_0 + 1) as f64);
+            let rrf_score = weight / (rrf_k + (rank_0 + 1) as f64);
 
             fused
                 .entry(key)

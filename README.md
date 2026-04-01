@@ -105,7 +105,7 @@ vera search "authentication logic"
 vera search "error handling" --lang rust
 vera search "routes" --path "src/**/*.ts"
 vera search "handler" --type function --limit 5
-vera search "config loading" --deep              # RAG-fusion query expansion (or iterative symbol-following)
+vera search "config loading" --deep              # query decomposition + parallel search (or iterative symbol-following)
 vera search "auth" --compact                     # signatures only, broad exploration
 ```
 
@@ -202,7 +202,7 @@ Use Vera before opening many files or running broad text search when you need to
 - `vera grep "pattern"` for exact text or regex
 - `vera references <symbol>` for callers and callees
 - `vera overview` for a project summary (languages, entry points, hotspots)
-- `vera search --deep "query"` for RAG-fusion query expansion + merged ranking
+- `vera search --deep "query"` for query decomposition + parallel search with weighted fusion
 - Narrow results with `--lang`, `--path`, `--type`, or `--scope docs`
 - `vera watch .` to auto-update the index, or `vera update .` after edits (`vera index .` if `.vera/` is missing)
 - For detailed usage, query patterns, and troubleshooting, read the Vera skill file installed by `vera agent install`

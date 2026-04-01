@@ -849,7 +849,7 @@ fn extract_wheel_libs(data: &[u8], dest_dir: &std::path::Path) -> Result<()> {
             continue;
         }
         let local_name = strip_so_version(filename);
-        let dest = dest_dir.join(local_name);
+        let dest = dest_dir.join(&local_name);
         let mut out = std::fs::File::create(&dest)?;
         std::io::copy(&mut entry, &mut out)?;
         #[cfg(unix)]
@@ -857,6 +857,7 @@ fn extract_wheel_libs(data: &[u8], dest_dir: &std::path::Path) -> Result<()> {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(&dest, std::fs::Permissions::from_mode(0o755))?;
         }
+        create_versioned_symlink(dest_dir, filename, &local_name);
         extracted += 1;
     }
 
@@ -916,13 +917,14 @@ async fn copy_so_files_from_dir(
             continue;
         }
         let local_name = strip_so_version(filename);
-        let dest = dest_dir.join(local_name);
+        let dest = dest_dir.join(&local_name);
         fs::copy(&path, &dest).await?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
             fs::set_permissions(&dest, std::fs::Permissions::from_mode(0o755)).await?;
         }
+        create_versioned_symlink(dest_dir, filename, &local_name);
         extracted += 1;
     }
     if extracted == 0 {
@@ -1614,7 +1616,11 @@ fn extract_tgz_all_libs(data: &[u8], dest_dir: &std::path::Path) -> Result<()> {
         if !path_str.contains("/lib/") {
             continue;
         }
-        let filename = path.file_name().and_then(|f| f.to_str()).unwrap_or("");
+        let filename = path
+            .file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or("")
+            .to_string();
         // Extract .so, .dylib, .dll files (skip .pc and other non-library files)
         let is_lib =
             filename.contains(".so") || filename.ends_with(".dylib") || filename.ends_with(".dll");
@@ -1622,9 +1628,10 @@ fn extract_tgz_all_libs(data: &[u8], dest_dir: &std::path::Path) -> Result<()> {
             continue;
         }
         // Normalize versioned names: libonnxruntime.so.1.23.2 → libonnxruntime.so
-        let local_name = strip_so_version(filename);
-        let dest = dest_dir.join(local_name);
+        let local_name = strip_so_version(&filename);
+        let dest = dest_dir.join(&local_name);
         write_lib_file(&mut entry, &dest)?;
+        create_versioned_symlink(dest_dir, &filename, &local_name);
         extracted += 1;
     }
 
@@ -1642,6 +1649,27 @@ fn strip_so_version(name: &str) -> String {
         name.to_string()
     }
 }
+
+/// Create a versioned symlink if the original filename differs from the
+/// stripped name. For example, if `original` is "libopenvino.so.2541" and
+/// `stripped` is "libopenvino.so", creates a symlink
+/// `dest_dir/libopenvino.so.2541 -> libopenvino.so`.
+#[cfg(unix)]
+fn create_versioned_symlink(dest_dir: &std::path::Path, original: &str, stripped: &str) {
+    if original == stripped {
+        return;
+    }
+    let link = dest_dir.join(original);
+    if link.exists() || link.symlink_metadata().is_ok() {
+        return;
+    }
+    if let Err(e) = std::os::unix::fs::symlink(stripped, &link) {
+        tracing::debug!(link = %link.display(), target = stripped, error = %e, "failed to create versioned symlink");
+    }
+}
+
+#[cfg(not(unix))]
+fn create_versioned_symlink(_dest_dir: &std::path::Path, _original: &str, _stripped: &str) {}
 
 fn write_lib_file(reader: &mut impl std::io::Read, dest: &std::path::Path) -> Result<()> {
     let mut out = std::fs::File::create(dest)?;

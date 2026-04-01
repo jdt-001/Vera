@@ -1,8 +1,9 @@
 //! Deep search via RAG Fusion.
 //!
-//! 1. Expand the user query into multiple variants using a completion model.
-//! 2. Execute standard hybrid search for each variant.
-//! 3. Merge all results with reciprocal rank fusion.
+//! 1. Decompose the user query into targeted sub-queries using a completion model.
+//! 2. Execute standard hybrid search for each sub-query in parallel.
+//! 3. Merge all results with weighted reciprocal rank fusion (original query
+//!    receives higher weight).
 //!
 //! Falls back to iterative (symbol-following) search when no completion
 //! endpoint is configured.
@@ -19,7 +20,7 @@ use crate::retrieval::bm25::search_bm25;
 use crate::types::{SearchFilters, SearchResult};
 
 use super::completion_client::CompletionClient;
-use super::hybrid::fuse_rrf_multi;
+use super::hybrid::fuse_rrf_multi_weighted;
 use super::search_service::{SearchTimings, execute_search};
 
 /// Execute deep search: RAG-fusion if a completion endpoint is configured,
@@ -101,29 +102,77 @@ fn execute_rag_fusion(
         ));
     }
 
-    let mut aggregated_timings = SearchTimings::default();
-    let mut per_query_results: Vec<Vec<SearchResult>> = Vec::with_capacity(queries.len());
     let per_query_limit = compute_per_query_limit(result_limit);
 
-    for (idx, q) in queries.iter().enumerate() {
-        match execute_search(index_dir, q, config, filters, per_query_limit, backend) {
+    // Run all sub-queries in parallel using OS threads (each execute_search
+    // creates its own tokio runtime internally).
+    let query_count = queries.len();
+    #[allow(clippy::type_complexity)]
+    let results_and_timings: Vec<(usize, Result<(Vec<SearchResult>, SearchTimings)>)> =
+        std::thread::scope(|s| {
+            let handles: Vec<_> = queries
+                .iter()
+                .enumerate()
+                .map(|(idx, q)| {
+                    let q = q.clone();
+                    let index_dir = index_dir.to_path_buf();
+                    let config = config.clone();
+                    let filters = filters.clone();
+                    s.spawn(move || {
+                        (
+                            idx,
+                            execute_search(
+                                &index_dir,
+                                &q,
+                                &config,
+                                &filters,
+                                per_query_limit,
+                                backend,
+                            ),
+                        )
+                    })
+                })
+                .collect();
+            handles.into_iter().map(|h| h.join().unwrap()).collect()
+        });
+
+    let mut aggregated_timings = SearchTimings::default();
+    let mut per_query_results: Vec<Vec<SearchResult>> = vec![Vec::new(); query_count];
+    let mut per_query_weights: Vec<f64> = vec![0.0; query_count];
+
+    for (idx, result) in results_and_timings {
+        match result {
             Ok((results, timings)) => {
                 merge_timings(&mut aggregated_timings, &timings);
-                per_query_results.push(results);
+                per_query_results[idx] = results;
+                // Original query (idx 0) gets 2x weight.
+                per_query_weights[idx] = if idx == 0 { 2.0 } else { 1.0 };
             }
             Err(e) if idx == 0 => return Err(e),
             Err(e) => {
-                warn!(query = %q, error = %e, "deep-search subquery failed; continuing");
+                warn!(query = %queries[idx], error = %e, "deep-search subquery failed; continuing");
             }
         }
     }
 
-    if per_query_results.is_empty() {
+    // Remove empty slots (failed queries).
+    let (filled_results, filled_weights): (Vec<_>, Vec<_>) = per_query_results
+        .into_iter()
+        .zip(per_query_weights)
+        .filter(|(r, _)| !r.is_empty())
+        .unzip();
+
+    if filled_results.is_empty() {
         return Err(anyhow!("deep search failed: all query candidates failed"));
     }
 
-    let slices: Vec<&[SearchResult]> = per_query_results.iter().map(Vec::as_slice).collect();
-    let fused = fuse_rrf_multi(&slices, config.retrieval.rrf_k, result_limit);
+    let slices: Vec<&[SearchResult]> = filled_results.iter().map(Vec::as_slice).collect();
+    let fused = fuse_rrf_multi_weighted(
+        &slices,
+        &filled_weights,
+        config.retrieval.rrf_k,
+        result_limit,
+    );
 
     aggregated_timings.total = Some(overall_start.elapsed());
     Ok((fused, aggregated_timings))

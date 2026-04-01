@@ -7,7 +7,7 @@ use anyhow::{Context, Result, anyhow};
 use serde::Serialize;
 
 const DEFAULT_TIMEOUT_SECS: u64 = 120;
-const DEFAULT_MAX_ALTERNATIVES: usize = 4;
+const DEFAULT_MAX_ALTERNATIVES: usize = 2;
 const MAX_ALLOWED_ALTERNATIVES: usize = 8;
 const DEFAULT_MAX_TOKENS: u32 = 16_384;
 const MIN_MAX_TOKENS: u32 = 128;
@@ -147,9 +147,10 @@ impl CompletionClient {
 
         let prompt = format!(
             "Original query: {query}{context_block}\n\n\
-             Generate {} alternative code-search queries that keep the same intent \
-             but vary terminology and angle (implementation, API usage, symbols, \
-             related concepts).\n\n\
+             Decompose this into {} targeted sub-queries that each search for a \
+             different code location or concept needed to answer the original query. \
+             Each sub-query should target specific symbols, types, or code patterns \
+             rather than rephrasing the same idea.\n\n\
              Return ONLY a JSON array of strings.",
             self.config.max_alternatives
         );
@@ -159,8 +160,10 @@ impl CompletionClient {
             messages: vec![
                 ChatMessage {
                     role: "system",
-                    content: "You generate query rewrites for code retrieval. \
-                              Keep each query concise and faithful to the original intent. \
+                    content: "You decompose code-search queries into targeted sub-queries. \
+                              Each sub-query should find a different piece of code needed \
+                              to answer the original question. Use concrete symbol names, \
+                              type names, or file patterns when possible. \
                               Output only the requested JSON."
                         .to_string(),
                 },
