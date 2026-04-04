@@ -446,6 +446,84 @@ fn toml_uses_whole_file_chunking() {
     assert_eq!(chunks[0].line_end, 3);
 }
 
+#[test]
+fn whole_file_chunking_respects_max_chunk_bytes() {
+    let source = (0..250)
+        .map(|i| format!("key_{i} = \"{}\"", "x".repeat(24)))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let config = IndexingConfig {
+        max_chunk_bytes: 600,
+        ..Default::default()
+    };
+
+    let chunks = parse_and_chunk(&source, "large.toml", Language::Toml, &config).unwrap();
+
+    assert!(
+        chunks.len() > 1,
+        "oversized whole-file chunks should be split"
+    );
+    assert!(
+        chunks.iter().all(|chunk| chunk.content.len() <= 600),
+        "all split chunks should stay within max_chunk_bytes"
+    );
+}
+
+#[test]
+fn rst_respects_max_chunk_bytes() {
+    let source = (0..250)
+        .map(|i| format!("Paragraph {i}: {}", "x".repeat(28)))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let config = IndexingConfig {
+        max_chunk_bytes: 600,
+        ..Default::default()
+    };
+
+    let chunks = parse_and_chunk(&source, "guide.rst", Language::Rst, &config).unwrap();
+
+    assert!(chunks.len() > 1, "oversized RST chunks should be split");
+    assert!(
+        chunks.iter().all(|chunk| chunk.content.len() <= 600),
+        "all split chunks should stay within max_chunk_bytes"
+    );
+}
+
+#[test]
+fn rst_chunks_are_section_aware() {
+    let source = r#"Messenger
+=========
+
+Intro paragraph.
+
+Installation
+------------
+
+Install the package.
+
+Usage
+-----
+
+Dispatch messages.
+"#;
+
+    let chunks = parse_and_chunk(source, "guide.rst", Language::Rst, &default_config()).unwrap();
+
+    let names: Vec<String> = chunks
+        .iter()
+        .filter_map(|c| c.symbol_name.clone())
+        .collect();
+    assert!(names.iter().any(|n| n == "Messenger"));
+    assert!(names.iter().any(|n| n == "Installation"));
+    assert!(names.iter().any(|n| n == "Usage"));
+
+    let usage = chunks
+        .iter()
+        .find(|chunk| chunk.symbol_name.as_deref() == Some("Usage"))
+        .expect("expected a Usage section chunk");
+    assert!(usage.content.contains("Dispatch messages."));
+}
+
 // =========================================================
 // Large symbol splitting
 // =========================================================

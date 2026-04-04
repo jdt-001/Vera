@@ -539,27 +539,28 @@ fn embedding_error_message(error: &EmbeddingError) -> &str {
 
 fn context_size_limit(error: &EmbeddingError) -> Option<usize> {
     let message = embedding_error_message(error);
-    if !message.contains("context size")
-        && !message.contains("exceed_context_size_error")
-        && !message.contains("\"n_ctx\"")
+    let lower = message.to_ascii_lowercase();
+    if !lower.contains("context size")
+        && !lower.contains("exceed_context_size_error")
+        && !lower.contains("\"n_ctx\"")
+        && !lower.contains("too large to process")
     {
         return None;
     }
 
     static N_CTX_RE: OnceLock<Regex> = OnceLock::new();
     static MAX_CONTEXT_RE: OnceLock<Regex> = OnceLock::new();
+    static BATCH_SIZE_RE: OnceLock<Regex> = OnceLock::new();
     let n_ctx_re = N_CTX_RE.get_or_init(|| Regex::new(r#""n_ctx"\s*:\s*(\d+)"#).unwrap());
     let max_context_re =
         MAX_CONTEXT_RE.get_or_init(|| Regex::new(r"max context size \((\d+)\)").unwrap());
+    let batch_size_re = BATCH_SIZE_RE.get_or_init(|| Regex::new(r"batch size:\s*(\d+)").unwrap());
 
     n_ctx_re
-        .captures(message)
+        .captures(&lower)
         .and_then(|caps| caps.get(1))
-        .or_else(|| {
-            max_context_re
-                .captures(message)
-                .and_then(|caps| caps.get(1))
-        })
+        .or_else(|| max_context_re.captures(&lower).and_then(|caps| caps.get(1)))
+        .or_else(|| batch_size_re.captures(&lower).and_then(|caps| caps.get(1)))
         .and_then(|capture| capture.as_str().parse::<usize>().ok())
         .or(Some(8192))
 }

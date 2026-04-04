@@ -178,7 +178,7 @@ where
 
     // ── 3. Parse and chunk each file (parallelized with rayon) ──
     let (all_chunks, parse_errors, file_hashes, all_refs) =
-        parse_discovered_files_parallel(&discovery, config);
+        parse_discovered_files_parallel(&discovery, &repo_root, config);
 
     info!(
         chunks = all_chunks.len(),
@@ -273,6 +273,7 @@ where
 #[allow(clippy::type_complexity)]
 fn parse_discovered_files_parallel(
     discovery: &DiscoveryResult,
+    repo_root: &Path,
     config: &VeraConfig,
 ) -> (
     Vec<Chunk>,
@@ -281,6 +282,7 @@ fn parse_discovered_files_parallel(
     Vec<(String, Vec<RawReference>)>,
 ) {
     let config = Arc::new(config.clone());
+    let repo_root = Arc::new(repo_root.to_path_buf());
 
     // Process files in parallel: returns Ok((chunks, rel_path, hash, refs)) or Err.
     #[allow(clippy::type_complexity)]
@@ -319,27 +321,53 @@ fn parse_discovered_files_parallel(
 
                 let refs = parsing::parse_and_extract_references(&source, language);
 
-                parsing::parse_and_chunk(&source, &file.relative_path, language, &config.indexing)
-                    .inspect(|chunks| {
-                        debug!(
-                            file = %file.relative_path,
-                            chunks = chunks.len(),
-                            refs = refs.len(),
-                            "parsed file"
-                        );
-                    })
-                    .map(|chunks| (chunks, file.relative_path.clone(), hash, refs))
-                    .map_err(|err| {
-                        warn!(
-                            file = %file.relative_path,
-                            error = %err,
-                            "parse error"
-                        );
-                        FileError {
-                            file_path: file.relative_path.clone(),
-                            error: err.to_string(),
+                let normalized_source = if language == Language::Rst {
+                    match parsing::sphinx::preprocess_rst(
+                        &source,
+                        &file.absolute_path,
+                        repo_root.as_path(),
+                    ) {
+                        Ok(preprocessed) => Some(preprocessed),
+                        Err(err) => {
+                            warn!(
+                                file = %file.relative_path,
+                                error = %err,
+                                "failed to preprocess rst; falling back to raw source"
+                            );
+                            None
                         }
-                    })
+                    }
+                } else {
+                    None
+                };
+                let source_for_chunking = normalized_source.as_deref().unwrap_or(&source);
+
+                parsing::parse_and_chunk(
+                    source_for_chunking,
+                    &file.relative_path,
+                    language,
+                    &config.indexing,
+                )
+                .inspect(|chunks| {
+                    debug!(
+                        file = %file.relative_path,
+                        chunks = chunks.len(),
+                        refs = refs.len(),
+                        "parsed file"
+                    );
+                })
+                .map(|chunks| (chunks, file.relative_path.clone(), hash, refs))
+                .map_err(|err| {
+                    warn!(
+                        file = %file.relative_path,
+                        error = %err,
+                        "parse error"
+                    );
+                    FileError {
+                        file_path: file.relative_path.clone(),
+                        error: err.to_string(),
+                    }
+                })
             })
             .collect();
 

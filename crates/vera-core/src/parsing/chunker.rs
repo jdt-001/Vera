@@ -291,6 +291,99 @@ pub fn markdown_section_chunks(source: &str, file_path: &str) -> Vec<Chunk> {
     chunks
 }
 
+/// Split an RST file into heading-based chunks.
+///
+/// `headings` is expected to come from tree-sitter title nodes as
+/// `(start_row, title_text)` pairs (0-based rows).
+pub fn rst_section_chunks(source: &str, file_path: &str, headings: &[(u32, String)]) -> Vec<Chunk> {
+    if source.trim().is_empty() {
+        return Vec::new();
+    }
+
+    let lines: Vec<&str> = source.lines().collect();
+    if lines.is_empty() {
+        return Vec::new();
+    }
+
+    let mut sections: Vec<(usize, String)> = headings
+        .iter()
+        .filter_map(|(row, title)| {
+            let row = *row as usize;
+            if row >= lines.len() {
+                return None;
+            }
+            let normalized = title.split_whitespace().collect::<Vec<_>>().join(" ");
+            if normalized.is_empty() {
+                return None;
+            }
+            Some((row, normalized))
+        })
+        .collect();
+
+    sections.sort_by_key(|(row, _)| *row);
+    sections.dedup_by(|a, b| a.0 == b.0);
+
+    if sections.is_empty() {
+        return whole_file_chunk(source, file_path, Language::Rst);
+    }
+
+    let mut chunks = Vec::new();
+    let mut chunk_index: u32 = 0;
+
+    let first_start = sections[0].0 as u32;
+    if first_start > 0 {
+        let preface = join_lines(&lines, 0, first_start.saturating_sub(1));
+        if !preface.trim().is_empty() {
+            chunks.push(Chunk {
+                id: format!("{file_path}:{chunk_index}"),
+                file_path: file_path.to_string(),
+                line_start: 1,
+                line_end: first_start,
+                content: preface,
+                language: Language::Rst,
+                symbol_type: Some(SymbolType::Block),
+                symbol_name: Some(file_name(file_path).to_string()),
+            });
+            chunk_index += 1;
+        }
+    }
+
+    for (idx, (start_row, title)) in sections.iter().enumerate() {
+        let end_row = if idx + 1 < sections.len() {
+            sections[idx + 1].0.saturating_sub(1)
+        } else {
+            lines.len().saturating_sub(1)
+        };
+
+        if end_row < *start_row {
+            continue;
+        }
+
+        let content = join_lines(&lines, *start_row as u32, end_row as u32);
+        if content.trim().is_empty() {
+            continue;
+        }
+
+        chunks.push(Chunk {
+            id: format!("{file_path}:{chunk_index}"),
+            file_path: file_path.to_string(),
+            line_start: *start_row as u32 + 1,
+            line_end: end_row as u32 + 1,
+            content,
+            language: Language::Rst,
+            symbol_type: Some(SymbolType::Block),
+            symbol_name: Some(title.clone()),
+        });
+        chunk_index += 1;
+    }
+
+    if chunks.is_empty() {
+        return whole_file_chunk(source, file_path, Language::Rst);
+    }
+
+    chunks
+}
+
 /// Tier 0 fallback: sliding-window line-based chunking.
 ///
 /// Used for files with no tree-sitter grammar support. Produces overlapping

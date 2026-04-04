@@ -279,13 +279,14 @@ pub enum Language {
     Elm,
     Glsl,
     Hlsl,
-    /// Tier 2B structural/config/frontend languages.
+    /// Tier 2B structural/config/frontend/doc languages.
     Svelte,
     Astro,
     Makefile,
     Ini,
     Nginx,
     Prisma,
+    Rst,
     /// Data / config formats (Tier 0 — no tree-sitter grammar).
     Toml,
     Yaml,
@@ -298,10 +299,15 @@ pub enum Language {
 impl Language {
     /// Detect language from a full filename (for extensionless files like Dockerfile, CMakeLists.txt, Makefile).
     pub fn from_filename(name: &str) -> Option<Self> {
-        match name {
-            "Dockerfile" | "dockerfile" => Some(Self::Dockerfile),
-            "CMakeLists.txt" => Some(Self::CMake),
-            "Makefile" | "makefile" | "GNUmakefile" => Some(Self::Makefile),
+        let lower = name.to_ascii_lowercase();
+        if lower.ends_with(".rst.inc") {
+            return Some(Self::Rst);
+        }
+
+        match lower.as_str() {
+            "dockerfile" => Some(Self::Dockerfile),
+            "cmakelists.txt" => Some(Self::CMake),
+            "makefile" | "gnumakefile" => Some(Self::Makefile),
             "nginx.conf" => Some(Self::Nginx),
             _ => None,
         }
@@ -368,6 +374,7 @@ impl Language {
             "ini" | "cfg" | "conf" => Self::Ini,
             "nginx" => Self::Nginx,
             "prisma" => Self::Prisma,
+            "rst" => Self::Rst,
             "toml" => Self::Toml,
             "yaml" | "yml" => Self::Yaml,
             "json" => Self::Json,
@@ -409,6 +416,7 @@ impl Language {
                 | Self::Makefile
                 | Self::Dockerfile
                 | Self::CMake
+                | Self::Rst
         )
     }
 }
@@ -476,6 +484,7 @@ impl std::fmt::Display for Language {
             Self::Ini => "ini",
             Self::Nginx => "nginx",
             Self::Prisma => "prisma",
+            Self::Rst => "rst",
             Self::Toml => "toml",
             Self::Yaml => "yaml",
             Self::Json => "json",
@@ -553,6 +562,7 @@ impl std::str::FromStr for Language {
             "ini" => Ok(Self::Ini),
             "nginx" => Ok(Self::Nginx),
             "prisma" => Ok(Self::Prisma),
+            "rst" => Ok(Self::Rst),
             "toml" => Ok(Self::Toml),
             "yaml" => Ok(Self::Yaml),
             "json" => Ok(Self::Json),
@@ -929,6 +939,11 @@ mod tests {
     }
 
     #[test]
+    fn language_from_extension_rst() {
+        assert_eq!(Language::from_extension("rst"), Language::Rst);
+    }
+
+    #[test]
     fn language_from_filename_makefile() {
         assert_eq!(
             Language::from_filename("Makefile"),
@@ -950,6 +965,14 @@ mod tests {
     }
 
     #[test]
+    fn language_from_filename_rst_inc() {
+        assert_eq!(
+            Language::from_filename("choice_translation_domain_disabled.rst.inc"),
+            Some(Language::Rst)
+        );
+    }
+
+    #[test]
     fn language_display_tier2b() {
         assert_eq!(Language::Svelte.to_string(), "svelte");
         assert_eq!(Language::Astro.to_string(), "astro");
@@ -957,6 +980,7 @@ mod tests {
         assert_eq!(Language::Ini.to_string(), "ini");
         assert_eq!(Language::Nginx.to_string(), "nginx");
         assert_eq!(Language::Prisma.to_string(), "prisma");
+        assert_eq!(Language::Rst.to_string(), "rst");
     }
 
     #[test]

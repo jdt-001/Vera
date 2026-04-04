@@ -25,7 +25,7 @@
 
 **V**ector **E**nhanced **R**eranking **A**gent
 
-Code search that combines BM25 keyword matching, vector similarity, and cross-encoder reranking. Supports 64 languages (60 with tree-sitter parsing), runs locally, returns structured results with file paths, line ranges, symbol metadata, and relevance scores.
+Code search that combines BM25 keyword matching, vector similarity, and cross-encoder reranking. Supports 65 languages (61 with tree-sitter parsing), runs locally, returns structured results with file paths, line ranges, symbol metadata, and relevance scores.
 
 </div>
 
@@ -58,7 +58,7 @@ vera search "authentication logic"
 | | |
 |---|---|
 | **Cross-encoder reranking** | Most tools stop at retrieval. Vera scores query-candidate pairs jointly, lifting MRR@10 from 0.28 to 0.60. |
-| **Single binary, 64 languages** | One static binary with 60 tree-sitter grammars compiled in. No Python, no language servers, no per-language toolchains. |
+| **Single binary, 65 languages** | One static binary with 61 tree-sitter grammars compiled in. No Python, no language servers, no per-language toolchains. |
 | **Built-in code intelligence** | Call graph analysis, reference finding, dead code detection, and project overview, all from the same index. |
 | **Token-efficient for agents** | Returns symbol-bounded chunks, not entire files. 75-95% fewer tokens on typical queries. |
 

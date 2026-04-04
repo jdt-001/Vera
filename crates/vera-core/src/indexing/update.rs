@@ -263,7 +263,30 @@ pub async fn update_repository<P: EmbeddingProvider>(
                     .context("failed to store references")?;
             }
 
-            match parsing::parse_and_chunk(content, rel_path, language, &config.indexing) {
+            let normalized_source = if language == Language::Rst {
+                let absolute_path = repo_root.join(rel_path);
+                match parsing::sphinx::preprocess_rst(content, &absolute_path, &repo_root) {
+                    Ok(preprocessed) => Some(preprocessed),
+                    Err(err) => {
+                        warn!(
+                            file = %rel_path,
+                            error = %err,
+                            "failed to preprocess rst during update; falling back to raw source"
+                        );
+                        None
+                    }
+                }
+            } else {
+                None
+            };
+            let source_for_chunking = normalized_source.as_deref().unwrap_or(content);
+
+            match parsing::parse_and_chunk(
+                source_for_chunking,
+                rel_path,
+                language,
+                &config.indexing,
+            ) {
                 Ok(chunks) => {
                     debug!(file = %rel_path, chunks = chunks.len(), "parsed file");
                     all_chunks.extend(chunks);

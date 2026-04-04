@@ -59,6 +59,7 @@ pub fn classify_path(file_path: &str, language: Language) -> ContentClass {
         return ContentClass::Bench;
     }
     if language == Language::Markdown
+        || language == Language::Rst
         || contains_token(
             &tokens,
             &[
@@ -224,6 +225,14 @@ mod tests {
         assert_eq!(
             classify_path("archive/docs/hotkeys.md", Language::Markdown),
             ContentClass::Archive
+        );
+    }
+
+    #[test]
+    fn classifies_rst_as_docs() {
+        assert_eq!(
+            classify_path("guide.rst", Language::Rst),
+            ContentClass::Docs
         );
     }
 

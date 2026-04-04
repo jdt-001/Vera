@@ -91,6 +91,7 @@ tree-sitter-make = "1.1.1"
 tree-sitter-ini = "1.4.0"
 tree-sitter-nginx = "1.0.1"
 tree-sitter-prisma-io = "1.6.0"
+tree-sitter-rst = "0.2.0"
 ort = { version = "=2.0.0-rc.11", default-features = false, features = ["ndarray", "load-dynamic"] }
 flate2 = "1"
 tar = "0.4"
@@ -106,4 +107,3 @@ cc = "1.2"
 [dev-dependencies]
 tempfile = "3"
 tokio = { workspace = true, features = ["test-util", "macros"] }
-

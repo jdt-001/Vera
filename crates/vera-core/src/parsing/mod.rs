@@ -17,6 +17,7 @@ pub mod extractor;
 pub mod languages;
 pub mod references;
 pub mod signatures;
+pub mod sphinx;
 
 use anyhow::{Context, Result};
 use tree_sitter::Parser;
@@ -44,22 +45,44 @@ pub fn parse_and_chunk(
     language: Language,
     config: &IndexingConfig,
 ) -> Result<Vec<Chunk>> {
-    if language == Language::Markdown {
-        return Ok(chunker::markdown_section_chunks(source, file_path));
-    }
-    if language.prefers_file_chunking() {
-        return Ok(chunker::whole_file_chunk(source, file_path, language));
-    }
-
-    let chunks = match languages::tree_sitter_grammar(language) {
-        Some(grammar) => parse_with_treesitter(source, file_path, language, grammar, config)?,
-        None => chunker::tier0_line_chunks(source, file_path, language),
+    let chunks = if language == Language::Markdown {
+        chunker::markdown_section_chunks(source, file_path)
+    } else if language == Language::Rst {
+        parse_rst_section_chunks(source, file_path)?
+    } else if language.prefers_file_chunking() {
+        chunker::whole_file_chunk(source, file_path, language)
+    } else {
+        match languages::tree_sitter_grammar(language) {
+            Some(grammar) => parse_with_treesitter(source, file_path, language, grammar, config)?,
+            None => chunker::tier0_line_chunks(source, file_path, language),
+        }
     };
 
     Ok(chunker::split_oversized_chunks(
         chunks,
         config.max_chunk_bytes,
     ))
+}
+
+fn parse_rst_section_chunks(source: &str, file_path: &str) -> Result<Vec<Chunk>> {
+    let grammar = languages::tree_sitter_grammar(Language::Rst)
+        .context("missing tree-sitter grammar for reStructuredText")?;
+
+    let mut parser = Parser::new();
+    parser
+        .set_language(&grammar)
+        .context("failed to load reStructuredText grammar")?;
+
+    let tree = parser
+        .parse(source, None)
+        .context("tree-sitter parsing returned None")?;
+
+    let headings = extractor::extract_rst_section_titles(&tree, source.as_bytes());
+    if headings.is_empty() {
+        return Ok(chunker::tier0_line_chunks(source, file_path, Language::Rst));
+    }
+
+    Ok(chunker::rst_section_chunks(source, file_path, &headings))
 }
 
 /// Parse source using tree-sitter and produce symbol-aware chunks.

@@ -817,6 +817,33 @@ pub fn extract_symbols(tree: &tree_sitter::Tree, source: &[u8], lang: Language) 
     symbols
 }
 
+/// Extract reStructuredText heading titles from the AST.
+///
+/// Returns a sorted list of `(start_row, title_text)` pairs. Rows are 0-based.
+pub fn extract_rst_section_titles(tree: &tree_sitter::Tree, source: &[u8]) -> Vec<(u32, String)> {
+    fn walk(node: tree_sitter::Node<'_>, source: &[u8], out: &mut Vec<(u32, String)>) {
+        if node.kind() == "title" {
+            if let Ok(text) = node.utf8_text(source) {
+                let title = text.split_whitespace().collect::<Vec<_>>().join(" ");
+                if !title.is_empty() {
+                    out.push((node.start_position().row as u32, title));
+                }
+            }
+        }
+
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            walk(child, source, out);
+        }
+    }
+
+    let mut titles = Vec::new();
+    walk(tree.root_node(), source, &mut titles);
+    titles.sort_by_key(|(row, _)| *row);
+    titles.dedup_by(|a, b| a.0 == b.0);
+    titles
+}
+
 /// Recursively collect symbols from AST nodes.
 ///
 /// `depth` limits how deep we recurse to avoid extracting deeply nested items

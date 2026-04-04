@@ -90,14 +90,23 @@ fn build_structured_text(chunk: &Chunk, max_bytes: usize) -> String {
         // header + "\n" + "Code:\n" = overhead before the actual content
         let overhead = header.len() + 1 + label.len() + 2;
         let content_budget = max_bytes.saturating_sub(overhead);
-        truncate_at_line_boundary(&chunk.content, content_budget)
+        if content_budget == 0 {
+            String::new()
+        } else {
+            truncate_at_line_boundary(&chunk.content, content_budget)
+        }
     } else {
         chunk.content.clone()
     };
 
     parts.push(format!("{label}:\n{content}"));
 
-    parts.join("\n")
+    let structured = parts.join("\n");
+    if max_bytes > 0 && structured.len() > max_bytes {
+        truncate_at_line_boundary(&structured, max_bytes)
+    } else {
+        structured
+    }
 }
 
 /// Truncate `text` to at most `max_bytes`, cutting at the last newline
@@ -683,5 +692,29 @@ pub fn authenticate(user: &str, password: &str) -> Result<Token> {\n\
         let max_bytes = "first line\n".len() + 1;
 
         assert_eq!(truncate_at_line_boundary(text, max_bytes), "first line");
+    }
+
+    #[test]
+    fn embedding_text_bounded_never_exceeds_byte_budget() {
+        let content = (0..120)
+            .map(|i| format!("use crate::very::long::module::path{i};"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let chunk = Chunk {
+            id: "src/lib.rs:0".to_string(),
+            file_path: "src/lib.rs".to_string(),
+            line_start: 1,
+            line_end: 120,
+            content,
+            language: Language::Rust,
+            symbol_type: Some(SymbolType::Block),
+            symbol_name: None,
+        };
+
+        let text = build_embedding_text_bounded(&chunk, 220);
+        assert!(
+            text.len() <= 220,
+            "bounded embedding text should not exceed max bytes"
+        );
     }
 }

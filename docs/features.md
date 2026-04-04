@@ -62,7 +62,7 @@ Narrow results by language (`--lang rust`), file path glob (`--path "src/**/*.rs
 
 ### Tree-Sitter Structural Parsing
 
-64 languages supported, 60 with tree-sitter grammars compiled into the binary. Functions, classes, structs, traits, interfaces, methods, and `impl` blocks are extracted as discrete chunks. Results map to actual symbol boundaries, not arbitrary line ranges. The remaining 4 formats (TOML, YAML, JSON, and Markdown) use text-based chunking.
+65 languages supported, 61 with tree-sitter grammars compiled into the binary. Functions, classes, structs, traits, interfaces, methods, and `impl` blocks are extracted as discrete chunks. Results map to actual symbol boundaries, not arbitrary line ranges. The remaining 4 formats (TOML, YAML, JSON, and Markdown) use text-based chunking.
 
 Symbol-aware chunking scores 2.3x higher MRR on symbol lookup than sliding-window chunking (0.55 vs 0.24), while using 14% fewer tokens. Full list: [supported-languages.md](supported-languages.md).
 

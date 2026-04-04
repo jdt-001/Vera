@@ -829,6 +829,7 @@ fn all_chunks_have_required_metadata_fields() {
         ),
         ("key = 'value'\n", "config.toml", Language::Toml),
         ("# Title\nSome text\n", "README.md", Language::Markdown),
+        ("Title\n=====\n\nSome text\n", "README.rst", Language::Rst),
     ];
 
     for (source, path, lang) in test_cases {
@@ -1046,6 +1047,7 @@ fn language_detection_matches_extension() {
         ("yml", Language::Yaml),
         ("json", Language::Json),
         ("md", Language::Markdown),
+        ("rst", Language::Rst),
         ("xyz", Language::Unknown),
     ];
 

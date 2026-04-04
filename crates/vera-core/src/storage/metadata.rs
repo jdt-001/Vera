@@ -1033,6 +1033,7 @@ mod tests {
             Language::Ini,
             Language::Nginx,
             Language::Prisma,
+            Language::Rst,
             // Tier 0
             Language::Toml,
             Language::Yaml,

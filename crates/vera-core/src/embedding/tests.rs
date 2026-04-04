@@ -24,6 +24,11 @@ struct ContextLimitProvider {
     max_chars: usize,
 }
 
+struct TokenLimitBatchProvider {
+    dim: usize,
+    max_chars: usize,
+}
+
 impl EmbeddingProvider for ContextLimitProvider {
     async fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, EmbeddingError> {
         if texts
@@ -33,6 +38,29 @@ impl EmbeddingProvider for ContextLimitProvider {
             return Err(EmbeddingError::ApiError {
                 status: 400,
                 message: r#"{"error":{"code":400,"message":"input (8766 tokens) is larger than the max context size (8192 tokens). skipping","type":"exceed_context_size_error","n_prompt_tokens":8766,"n_ctx":8192}}"#.to_string(),
+            });
+        }
+
+        Ok(texts
+            .iter()
+            .map(|text| vec![text.len() as f32, 1.0, 2.0, 3.0][..self.dim].to_vec())
+            .collect())
+    }
+
+    fn expected_dim(&self) -> Option<usize> {
+        Some(self.dim)
+    }
+}
+
+impl EmbeddingProvider for TokenLimitBatchProvider {
+    async fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, EmbeddingError> {
+        if texts
+            .iter()
+            .any(|text| text.chars().count() > self.max_chars)
+        {
+            return Err(EmbeddingError::ApiError {
+                status: 500,
+                message: r#"{"error":{"code":500,"message":"input (20301 tokens) is too large to process. increase the physical batch size (current batch size: 4096)","type":"server_error"}}"#.to_string(),
             });
         }
 
@@ -392,6 +420,25 @@ async fn concurrent_embed_recovers_from_context_limit_errors() {
     };
     let mut chunks = sample_chunks(3);
     chunks[1].content = format!("fn huge() {{\n    {}\n}}", "x".repeat(600));
+
+    let result = embed_chunks_concurrent(&provider, &chunks, 2, 2, 0)
+        .await
+        .unwrap();
+
+    assert_eq!(result.len(), 3);
+    assert_eq!(result[0].0, "chunk-0");
+    assert_eq!(result[1].0, "chunk-1");
+    assert_eq!(result[2].0, "chunk-2");
+}
+
+#[tokio::test]
+async fn concurrent_embed_recovers_from_token_limit_batch_errors() {
+    let provider = TokenLimitBatchProvider {
+        dim: 4,
+        max_chars: 5_000,
+    };
+    let mut chunks = sample_chunks(3);
+    chunks[1].content = format!("fn huge() {{\n    {}\n}}", "x".repeat(7_000));
 
     let result = embed_chunks_concurrent(&provider, &chunks, 2, 2, 0)
         .await

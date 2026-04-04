@@ -95,6 +95,7 @@ pub fn tree_sitter_grammar(lang: Language) -> Option<TsLanguage> {
         Language::Ini => tree_sitter_ini::LANGUAGE.into(),
         Language::Nginx => tree_sitter_nginx::LANGUAGE.into(),
         Language::Prisma => tree_sitter_prisma_io::LANGUAGE.into(),
+        Language::Rst => tree_sitter_rst::LANGUAGE.into(),
         // Languages without tree-sitter grammar support → Tier 0 fallback
         Language::Toml
         | Language::Yaml
@@ -662,6 +663,7 @@ mod tests {
             Language::Ini,
             Language::Nginx,
             Language::Prisma,
+            Language::Rst,
         ];
         for lang in tier_2b {
             assert!(
@@ -753,6 +755,22 @@ mod tests {
         let tree = parser
             .parse(
                 "model User {\n  id    Int     @id @default(autoincrement())\n  name  String\n}\n",
+                None,
+            )
+            .unwrap();
+        assert!(!tree.root_node().has_error());
+    }
+
+    #[test]
+    fn rst_grammar_creates_valid_parser() {
+        let grammar = tree_sitter_grammar(Language::Rst).unwrap();
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&grammar)
+            .expect("reStructuredText grammar should load");
+        let tree = parser
+            .parse(
+                "Heading\n=======\n\nParagraph text.\n\nSection\n-------\n\nMore text.\n",
                 None,
             )
             .unwrap();
