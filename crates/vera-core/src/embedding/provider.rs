@@ -553,7 +553,7 @@ fn context_size_limit(error: &EmbeddingError) -> Option<usize> {
     static BATCH_SIZE_RE: OnceLock<Regex> = OnceLock::new();
     let n_ctx_re = N_CTX_RE.get_or_init(|| Regex::new(r#""n_ctx"\s*:\s*(\d+)"#).unwrap());
     let max_context_re =
-        MAX_CONTEXT_RE.get_or_init(|| Regex::new(r"max context size \((\d+)\)").unwrap());
+        MAX_CONTEXT_RE.get_or_init(|| Regex::new(r"max context size \((\d+)").unwrap());
     let batch_size_re = BATCH_SIZE_RE.get_or_init(|| Regex::new(r"batch size:\s*(\d+)").unwrap());
 
     n_ctx_re

@@ -320,14 +320,19 @@ async function ensureBinaryInstalled() {
   const installDir = path.join(defaultVeraHome(), "bin", version, target);
   const binaryPath = path.join(installDir, binaryName());
   if (fs.existsSync(binaryPath)) {
-    await createShim(binaryPath);
-    await writeInstallMetadata({
-      installMethod: currentInstallMethod(),
-      version,
-      binaryPath,
-      target,
-    });
-    return { binaryPath, version };
+    const stat = await fsp.stat(binaryPath);
+    if (stat.size > 1_000_000) {
+      await createShim(binaryPath);
+      await writeInstallMetadata({
+        installMethod: currentInstallMethod(),
+        version,
+        binaryPath,
+        target,
+      });
+      return { binaryPath, version };
+    }
+    // Stale or broken file (e.g. leftover shim from interrupted install).
+    await fsp.rm(binaryPath);
   }
 
   const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), "vera-install-"));

@@ -969,6 +969,12 @@ pub async fn ensure_ort_library_for_ep(ep: OnnxExecutionProvider) -> Result<Path
         return ensure_ort_via_pip_chain(ep, &lib_dir, &target_path).await;
     }
 
+    // DirectML: distributed via NuGet, not GitHub release archives.
+    #[cfg(target_os = "windows")]
+    if matches!(ep, OnnxExecutionProvider::DirectMl) {
+        return ensure_ort_via_nuget_directml(&lib_dir, &target_path).await;
+    }
+
     // Standard path: download from GitHub releases
     let (ext, archive_name, lib_path_in_archive, local_lib_name, ort_version) =
         ort_platform_info(ep)?;
@@ -1068,6 +1074,77 @@ pub async fn refresh_ort_library_for_ep(ep: OnnxExecutionProvider) -> Result<Pat
     ensure_ort_library_for_ep(ep).await
 }
 
+/// Download ONNX Runtime DirectML from NuGet.
+///
+/// DirectML builds are not published as GitHub release archives; they are only
+/// distributed via NuGet. The `.nupkg` is a zip containing DLLs at
+/// `runtimes/win-x64/native/`.
+#[cfg(target_os = "windows")]
+async fn ensure_ort_via_nuget_directml(
+    lib_dir: &std::path::Path,
+    target_path: &std::path::Path,
+) -> Result<PathBuf> {
+    let nuget_url = format!(
+        "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime.directml/{ORT_VERSION}/microsoft.ml.onnxruntime.directml.{ORT_VERSION}.nupkg"
+    );
+
+    eprintln!("Downloading ONNX Runtime v{ORT_VERSION} (directml) from NuGet...");
+    eprintln!("  {nuget_url}");
+
+    crate::init_tls();
+    let client = Client::new();
+    let res = client
+        .get(&nuget_url)
+        .header("User-Agent", "vera")
+        .send()
+        .await?
+        .error_for_status()
+        .context("failed to download DirectML NuGet package")?;
+    let bytes = res.bytes().await?;
+
+    let lib_dir_owned = lib_dir.to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        extract_nuget_native_dlls(&bytes, "runtimes/win-x64/native/", &lib_dir_owned)
+    })
+    .await??;
+
+    eprintln!(
+        "ONNX Runtime v{ORT_VERSION} (directml) installed to {}",
+        lib_dir.display()
+    );
+    Ok(target_path.to_path_buf())
+}
+
+/// Extract native DLLs from a NuGet package (zip) at the given prefix.
+#[cfg(target_os = "windows")]
+fn extract_nuget_native_dlls(data: &[u8], prefix: &str, dest_dir: &std::path::Path) -> Result<()> {
+    let cursor = std::io::Cursor::new(data);
+    let mut archive = zip::ZipArchive::new(cursor)?;
+    let mut extracted = 0usize;
+
+    for i in 0..archive.len() {
+        let mut entry = archive.by_index(i)?;
+        let path = entry.name().to_string();
+        if !path.starts_with(prefix) {
+            continue;
+        }
+        let filename = path.rsplit('/').next().unwrap_or("");
+        if !filename.ends_with(".dll") {
+            continue;
+        }
+        let dest = dest_dir.join(filename);
+        let mut out = std::fs::File::create(&dest)?;
+        std::io::copy(&mut entry, &mut out)?;
+        extracted += 1;
+    }
+
+    if extracted == 0 {
+        anyhow::bail!("no DLLs found in NuGet package at {prefix}");
+    }
+    eprintln!("  Extracted {extracted} libraries from NuGet package");
+    Ok(())
+}
+
 /// Pip-based fallback chain for OpenVINO and ROCm.
 #[cfg(target_os = "linux")]
 async fn ensure_ort_via_pip_chain(
@@ -1141,6 +1218,11 @@ pub fn ensure_provider_dependencies(
     ep: OnnxExecutionProvider,
     runtime_path: &std::path::Path,
 ) -> Result<()> {
+    // CPU mode only needs the core runtime library; skip provider dependency checks.
+    if matches!(ep, OnnxExecutionProvider::Cpu) {
+        return Ok(());
+    }
+
     let Some(status) = inspect_shared_library_deps(runtime_path)? else {
         return Ok(());
     };
