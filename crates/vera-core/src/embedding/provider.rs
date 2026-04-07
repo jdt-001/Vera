@@ -268,8 +268,10 @@ impl OpenAiProvider {
             match self.send_request(&url, &body).await {
                 Ok(vectors) => return Ok(vectors),
                 Err(e) => {
-                    // Don't retry auth errors — they won't resolve.
-                    if matches!(e, EmbeddingError::AuthError { .. }) {
+                    // Don't retry auth or context-size errors; they won't
+                    // resolve with the same request. Context-size errors are
+                    // handled by embed_batch_resilient which truncates the text.
+                    if matches!(e, EmbeddingError::AuthError { .. }) || is_context_size_error(&e) {
                         return Err(e);
                     }
                     warn!(
@@ -517,7 +519,6 @@ impl<P: EmbeddingProvider> EmbeddingProvider for CachedEmbeddingProvider<P> {
 
 // ── Batch embedding orchestrator ─────────────────────────────────────
 
-const CONTEXT_ERROR_CHARS_PER_TOKEN: usize = 2;
 const TRUNCATED_EMBEDDING_MARKER: &str = "\n\n[truncated for embedding]";
 
 #[derive(Clone)]
@@ -537,7 +538,12 @@ fn embedding_error_message(error: &EmbeddingError) -> &str {
     }
 }
 
-fn context_size_limit(error: &EmbeddingError) -> Option<usize> {
+struct ContextSizeInfo {
+    max_tokens: usize,
+    input_tokens: Option<usize>,
+}
+
+fn context_size_info(error: &EmbeddingError) -> Option<ContextSizeInfo> {
     let message = embedding_error_message(error);
     let lower = message.to_ascii_lowercase();
     if !lower.contains("context size")
@@ -551,18 +557,43 @@ fn context_size_limit(error: &EmbeddingError) -> Option<usize> {
     static N_CTX_RE: OnceLock<Regex> = OnceLock::new();
     static MAX_CONTEXT_RE: OnceLock<Regex> = OnceLock::new();
     static BATCH_SIZE_RE: OnceLock<Regex> = OnceLock::new();
+    static INPUT_TOKENS_RE: OnceLock<Regex> = OnceLock::new();
+    static N_PROMPT_RE: OnceLock<Regex> = OnceLock::new();
     let n_ctx_re = N_CTX_RE.get_or_init(|| Regex::new(r#""n_ctx"\s*:\s*(\d+)"#).unwrap());
     let max_context_re =
         MAX_CONTEXT_RE.get_or_init(|| Regex::new(r"max context size \((\d+)").unwrap());
     let batch_size_re = BATCH_SIZE_RE.get_or_init(|| Regex::new(r"batch size:\s*(\d+)").unwrap());
+    let input_tokens_re =
+        INPUT_TOKENS_RE.get_or_init(|| Regex::new(r"input \((\d+) tokens?\)").unwrap());
+    let n_prompt_re =
+        N_PROMPT_RE.get_or_init(|| Regex::new(r#""n_prompt_tokens"\s*:\s*(\d+)"#).unwrap());
 
-    n_ctx_re
+    let max_tokens = n_ctx_re
         .captures(&lower)
         .and_then(|caps| caps.get(1))
         .or_else(|| max_context_re.captures(&lower).and_then(|caps| caps.get(1)))
         .or_else(|| batch_size_re.captures(&lower).and_then(|caps| caps.get(1)))
         .and_then(|capture| capture.as_str().parse::<usize>().ok())
-        .or(Some(8192))
+        .or(Some(8192))?;
+
+    let input_tokens = n_prompt_re
+        .captures(&lower)
+        .and_then(|caps| caps.get(1))
+        .or_else(|| {
+            input_tokens_re
+                .captures(&lower)
+                .and_then(|caps| caps.get(1))
+        })
+        .and_then(|capture| capture.as_str().parse::<usize>().ok());
+
+    Some(ContextSizeInfo {
+        max_tokens,
+        input_tokens,
+    })
+}
+
+fn is_context_size_error(error: &EmbeddingError) -> bool {
+    context_size_info(error).is_some()
 }
 
 fn truncate_to_char_boundary(text: &str, max_chars: usize) -> &str {
@@ -576,19 +607,32 @@ fn truncate_to_char_boundary(text: &str, max_chars: usize) -> &str {
         .unwrap_or(text)
 }
 
-fn shrink_text_for_context_limit(text: &str, max_tokens: usize) -> String {
+fn shrink_text_for_context_limit(
+    text: &str,
+    max_tokens: usize,
+    input_tokens: Option<usize>,
+) -> String {
     let current_chars = text.chars().count();
     if current_chars <= 1 {
         return text.to_string();
     }
 
-    let estimated_budget = max_tokens.saturating_mul(CONTEXT_ERROR_CHARS_PER_TOKEN);
-    let fallback_budget = current_chars.saturating_mul(3) / 4;
     let marker_chars = TRUNCATED_EMBEDDING_MARKER.chars().count();
-    let target_chars = estimated_budget
-        .min(fallback_budget)
-        .max(1)
-        .saturating_sub(marker_chars);
+
+    let target_chars = if let Some(actual_tokens) = input_tokens.filter(|&t| t > 0) {
+        // We know exactly how many tokens the current text produced.
+        // Compute the real chars-per-token ratio and truncate precisely,
+        // targeting 85% of the context limit as a safety margin.
+        let ratio = current_chars as f64 / actual_tokens as f64;
+        let safe_limit = (max_tokens as f64 * 0.85) as usize;
+        (safe_limit as f64 * ratio) as usize
+    } else {
+        // No actual token count available. Use 75% of current length as
+        // a conservative fallback (always makes progress).
+        current_chars.saturating_mul(3) / 4
+    }
+    .max(1)
+    .saturating_sub(marker_chars);
 
     if target_chars >= current_chars {
         return text.to_string();
@@ -624,7 +668,7 @@ async fn embed_batch_resilient<P: EmbeddingProvider>(
                 );
             }
             Err(error) => {
-                let Some(limit) = context_size_limit(&error) else {
+                let Some(info) = context_size_info(&error) else {
                     return Err(error);
                 };
 
@@ -632,7 +676,7 @@ async fn embed_batch_resilient<P: EmbeddingProvider>(
                     let mid = batch.len() / 2;
                     debug!(
                         batch_size = batch.len(),
-                        token_limit = limit,
+                        token_limit = info.max_tokens,
                         "embedding batch exceeded provider context limit, retrying in smaller batches"
                     );
                     pending.push(batch[mid..].to_vec());
@@ -641,14 +685,16 @@ async fn embed_batch_resilient<P: EmbeddingProvider>(
                 }
 
                 let item = batch.into_iter().next().expect("single-item batch");
-                let shrunk_text = shrink_text_for_context_limit(&item.text, limit);
+                let shrunk_text =
+                    shrink_text_for_context_limit(&item.text, info.max_tokens, info.input_tokens);
                 if shrunk_text == item.text {
                     return Err(error);
                 }
 
                 warn!(
                     chunk_id = %item.chunk_id,
-                    token_limit = limit,
+                    token_limit = info.max_tokens,
+                    input_tokens = ?info.input_tokens,
                     original_chars = item.text.chars().count(),
                     shrunk_chars = shrunk_text.chars().count(),
                     "embedding input exceeded provider context limit; retrying with a truncated text"
