@@ -82,6 +82,11 @@ fn build_structured_text(chunk: &Chunk, max_bytes: usize) -> String {
         "Code"
     };
 
+    // Strip embedded data blobs (hex arrays, base85 fonts, numeric tables)
+    // before applying the byte budget so the token budget is spent on
+    // semantically meaningful code.
+    let collapsed = collapse_data_lines(&chunk.content);
+
     // When a byte budget is set, truncate the code content so the total
     // (metadata header + code) fits. Metadata is kept intact since it's
     // small and high-value for retrieval; only the code body is trimmed.
@@ -93,10 +98,10 @@ fn build_structured_text(chunk: &Chunk, max_bytes: usize) -> String {
         if content_budget == 0 {
             String::new()
         } else {
-            truncate_at_line_boundary(&chunk.content, content_budget)
+            truncate_at_line_boundary(&collapsed, content_budget)
         }
     } else {
-        chunk.content.clone()
+        collapsed
     };
 
     parts.push(format!("{label}:\n{content}"));
@@ -571,6 +576,70 @@ fn strip_comment_markers(line: &str) -> &str {
         .trim()
 }
 
+/// Minimum consecutive data lines required before collapsing.
+/// Prevents false positives on isolated unusual lines.
+const MIN_DATA_RUN: usize = 4;
+
+/// Collapse runs of data-dense lines (hex arrays, base85/base64 strings,
+/// numeric lookup tables) into short placeholders. These lines waste
+/// embedding tokens with zero semantic value for code search.
+fn collapse_data_lines(content: &str) -> String {
+    let lines: Vec<&str> = content.lines().collect();
+    let mut result = Vec::with_capacity(lines.len());
+    let mut i = 0;
+
+    while i < lines.len() {
+        if is_data_line(lines[i]) {
+            let run_start = i;
+            while i < lines.len() && is_data_line(lines[i]) {
+                i += 1;
+            }
+            let run_len = i - run_start;
+            if run_len >= MIN_DATA_RUN {
+                result.push(format!("[{run_len} lines of data]"));
+            } else {
+                for item in lines.iter().take(i).skip(run_start) {
+                    result.push(item.to_string());
+                }
+            }
+        } else {
+            result.push(lines[i].to_string());
+            i += 1;
+        }
+    }
+
+    result.join("\n")
+}
+
+/// A line is considered "data" if it's at least 40 characters and contains
+/// at most one identifier (4+ consecutive alphabetic characters). The
+/// threshold of 4 avoids false positives from hex literals (`0xFF` produces
+/// a 3-char alpha run `xFF`). This catches hex arrays, encoded strings
+/// (base85/base64 blobs), and numeric tables while leaving normal code
+/// untouched.
+fn is_data_line(line: &str) -> bool {
+    let trimmed = line.trim();
+    if trimmed.len() < 40 {
+        return false;
+    }
+    let mut identifiers = 0usize;
+    let mut alpha_run = 0usize;
+    for c in trimmed.chars() {
+        if c.is_alphabetic() {
+            alpha_run += 1;
+        } else {
+            if alpha_run >= 4 {
+                identifiers += 1;
+            }
+            alpha_run = 0;
+        }
+    }
+    if alpha_run >= 4 {
+        identifiers += 1;
+    }
+    identifiers <= 1
+}
+
 fn is_call_keyword(candidate: &str) -> bool {
     matches!(
         candidate,
@@ -715,6 +784,126 @@ pub fn authenticate(user: &str, password: &str) -> Result<Token> {\n\
         assert!(
             text.len() <= 220,
             "bounded embedding text should not exceed max bytes"
+        );
+    }
+
+    #[test]
+    fn is_data_line_detects_hex_arrays() {
+        assert!(is_data_line(
+            "    0xFF, 0x00, 0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0,"
+        ));
+    }
+
+    #[test]
+    fn is_data_line_detects_numeric_tables() {
+        assert!(is_data_line(
+            "    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,"
+        ));
+    }
+
+    #[test]
+    fn is_data_line_detects_base85_strings() {
+        assert!(is_data_line(
+            r#"    "7])#######hV0qs'/###[),##/l:$#Q6>##5[n42>c-TH`->>#/e]6Nds7j7()]""#
+        ));
+    }
+
+    #[test]
+    fn is_data_line_ignores_normal_code() {
+        assert!(!is_data_line(
+            "    let result = calculate_hash(input, &config)?;"
+        ));
+        assert!(!is_data_line("    if (window->DrawList) { return; }"));
+        assert!(!is_data_line("    return x;"));
+    }
+
+    #[test]
+    fn is_data_line_ignores_short_lines() {
+        assert!(!is_data_line("0xFF, 0x00,"));
+        assert!(!is_data_line("    123,"));
+    }
+
+    #[test]
+    fn collapse_data_lines_replaces_long_runs() {
+        let mut lines = Vec::new();
+        lines.push("static const unsigned char font_data[] = {".to_string());
+        for i in 0..10 {
+            lines.push(format!(
+                "    0x{i:02X}, 0x00, 0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0,"
+            ));
+        }
+        lines.push("};".to_string());
+        let content = lines.join("\n");
+
+        let collapsed = collapse_data_lines(&content);
+        assert!(
+            collapsed.contains("[10 lines of data]"),
+            "should collapse 10 data lines, got: {collapsed}"
+        );
+        assert!(
+            collapsed.contains("font_data"),
+            "should preserve the declaration line"
+        );
+        assert!(
+            collapsed.contains("};"),
+            "should preserve the closing brace"
+        );
+    }
+
+    #[test]
+    fn collapse_data_lines_keeps_short_runs() {
+        let content = "int x = 1;\n\
+            0xFF, 0x00, 0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0,\n\
+            0xFF, 0x00, 0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0,\n\
+            int y = 2;";
+        let collapsed = collapse_data_lines(content);
+        assert!(
+            !collapsed.contains("lines of data"),
+            "runs shorter than MIN_DATA_RUN should be kept"
+        );
+    }
+
+    #[test]
+    fn collapse_data_lines_preserves_normal_code() {
+        let content = "fn main() {\n\
+            let config = Config::new();\n\
+            let result = process(&config)?;\n\
+            println!(\"{result}\");\n\
+        }";
+        let collapsed = collapse_data_lines(content);
+        assert_eq!(collapsed, content, "normal code should be unchanged");
+    }
+
+    #[test]
+    fn embedding_text_collapses_embedded_data() {
+        let mut data_lines: Vec<String> = Vec::new();
+        data_lines.push("static const unsigned char font[] = {".to_string());
+        for _ in 0..20 {
+            data_lines.push(
+                "    0xFF, 0x00, 0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0,".to_string(),
+            );
+        }
+        data_lines.push("};".to_string());
+
+        let chunk = Chunk {
+            id: "imgui_draw.cpp:211".to_string(),
+            file_path: "Source/Include/dear-imgui/imgui_draw.cpp".to_string(),
+            line_start: 211,
+            line_end: 232,
+            content: data_lines.join("\n"),
+            language: Language::Cpp,
+            symbol_type: Some(SymbolType::Variable),
+            symbol_name: Some("font".to_string()),
+        };
+
+        let text = build_embedding_text(&chunk);
+        assert!(
+            text.contains("[20 lines of data]"),
+            "embedding text should collapse data lines"
+        );
+        assert!(
+            !text.contains("0xFF"),
+            "embedding text should not contain raw hex data"
         );
     }
 }
