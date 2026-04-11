@@ -32,6 +32,13 @@ impl EmbeddingProvider for DynamicProvider {
             Self::Local(p) => p.prepare_query_text(query),
         }
     }
+
+    fn max_batch_size(&self) -> Option<usize> {
+        match self {
+            Self::Api(p) => p.max_batch_size(),
+            Self::Local(p) => p.max_batch_size(),
+        }
+    }
 }
 
 pub async fn create_dynamic_provider(

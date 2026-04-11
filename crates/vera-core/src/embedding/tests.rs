@@ -1,5 +1,7 @@
 //! Tests for the embedding pipeline.
 
+use std::sync::{Arc, Mutex};
+
 use crate::embedding::provider::test_helpers::MockProvider;
 use crate::embedding::{EmbeddingError, EmbeddingProvider, embed_chunks, embed_chunks_concurrent};
 use crate::types::{Chunk, Language, SymbolType};
@@ -34,6 +36,12 @@ struct TokensInParensProvider {
     max_chars: usize,
 }
 
+struct BatchLimitedProvider {
+    dim: usize,
+    max_batch_size: usize,
+    max_seen_batch_size: Arc<Mutex<usize>>,
+}
+
 impl EmbeddingProvider for ContextLimitProvider {
     async fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, EmbeddingError> {
         if texts
@@ -48,7 +56,11 @@ impl EmbeddingProvider for ContextLimitProvider {
 
         Ok(texts
             .iter()
-            .map(|text| vec![text.len() as f32, 1.0, 2.0, 3.0][..self.dim].to_vec())
+            .map(|text| {
+                (0..self.dim)
+                    .map(|i| text.len() as f32 + i as f32)
+                    .collect()
+            })
             .collect())
     }
 
@@ -71,7 +83,11 @@ impl EmbeddingProvider for TokenLimitBatchProvider {
 
         Ok(texts
             .iter()
-            .map(|text| vec![text.len() as f32, 1.0, 2.0, 3.0][..self.dim].to_vec())
+            .map(|text| {
+                (0..self.dim)
+                    .map(|i| text.len() as f32 + i as f32)
+                    .collect()
+            })
             .collect())
     }
 
@@ -100,6 +116,41 @@ impl EmbeddingProvider for TokensInParensProvider {
 
     fn expected_dim(&self) -> Option<usize> {
         Some(self.dim)
+    }
+}
+
+impl EmbeddingProvider for BatchLimitedProvider {
+    async fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, EmbeddingError> {
+        let mut max_seen = self.max_seen_batch_size.lock().unwrap();
+        *max_seen = (*max_seen).max(texts.len());
+        drop(max_seen);
+
+        if texts.len() > self.max_batch_size {
+            return Err(EmbeddingError::ApiError {
+                status: 400,
+                message: format!(
+                    "* BatchEmbedContentsRequest.requests: at most {} requests can be in one batch",
+                    self.max_batch_size
+                ),
+            });
+        }
+
+        Ok(texts
+            .iter()
+            .map(|text| {
+                (0..self.dim)
+                    .map(|i| text.len() as f32 + i as f32)
+                    .collect()
+            })
+            .collect())
+    }
+
+    fn expected_dim(&self) -> Option<usize> {
+        Some(self.dim)
+    }
+
+    fn max_batch_size(&self) -> Option<usize> {
+        Some(self.max_batch_size)
     }
 }
 
@@ -230,6 +281,24 @@ async fn embed_chunks_batch_size_one() {
     let result = embed_chunks(&provider, &chunks, 1, 0).await.unwrap();
 
     assert_eq!(result.len(), 3);
+}
+
+#[tokio::test]
+async fn embed_chunks_concurrent_clamps_to_provider_batch_limit() {
+    let max_seen_batch_size = Arc::new(Mutex::new(0));
+    let provider = BatchLimitedProvider {
+        dim: 16,
+        max_batch_size: 100,
+        max_seen_batch_size: max_seen_batch_size.clone(),
+    };
+    let chunks = sample_chunks(205);
+
+    let result = embed_chunks_concurrent(&provider, &chunks, 128, 4, 0)
+        .await
+        .unwrap();
+
+    assert_eq!(result.len(), 205);
+    assert_eq!(*max_seen_batch_size.lock().unwrap(), 100);
 }
 
 #[tokio::test]

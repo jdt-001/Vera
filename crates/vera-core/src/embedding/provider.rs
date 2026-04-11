@@ -58,6 +58,13 @@ pub trait EmbeddingProvider: Send + Sync {
     fn prepare_query_text(&self, query: &str) -> String {
         query.to_string()
     }
+
+    /// Return the maximum number of inputs the provider accepts per request.
+    ///
+    /// `None` means Vera should use the configured batch size as-is.
+    fn max_batch_size(&self) -> Option<usize> {
+        None
+    }
 }
 
 // ── Configuration ────────────────────────────────────────────────────
@@ -394,6 +401,10 @@ impl EmbeddingProvider for OpenAiProvider {
             None => query.to_string(),
         }
     }
+
+    fn max_batch_size(&self) -> Option<usize> {
+        provider_batch_limit(&self.config)
+    }
 }
 
 // ── Cached embedding provider ────────────────────────────────────────
@@ -515,11 +526,46 @@ impl<P: EmbeddingProvider> EmbeddingProvider for CachedEmbeddingProvider<P> {
     fn prepare_query_text(&self, query: &str) -> String {
         self.inner.prepare_query_text(query)
     }
+
+    fn max_batch_size(&self) -> Option<usize> {
+        self.inner.max_batch_size()
+    }
 }
 
 // ── Batch embedding orchestrator ─────────────────────────────────────
 
 const TRUNCATED_EMBEDDING_MARKER: &str = "\n\n[truncated for embedding]";
+
+fn provider_batch_limit(config: &EmbeddingProviderConfig) -> Option<usize> {
+    let base_url = config.base_url.to_ascii_lowercase();
+    let model_id = config.model_id.to_ascii_lowercase();
+
+    if base_url.contains("generativelanguage.googleapis.com")
+        || base_url.contains("ai.google.dev")
+        || (base_url.contains("googleapis.com") && model_id.contains("gemini"))
+        || model_id.contains("gemini")
+    {
+        Some(100)
+    } else {
+        None
+    }
+}
+
+fn effective_batch_size<P: EmbeddingProvider>(provider: &P, configured_batch_size: usize) -> usize {
+    let configured_batch_size = configured_batch_size.max(1);
+    match provider.max_batch_size().filter(|limit| *limit > 0) {
+        Some(provider_limit) if provider_limit < configured_batch_size => {
+            debug!(
+                configured_batch_size,
+                provider_limit,
+                effective_batch_size = provider_limit,
+                "clamped embedding batch size to provider limit"
+            );
+            provider_limit
+        }
+        _ => configured_batch_size,
+    }
+}
 
 #[derive(Clone)]
 struct EmbeddingBatchItem {
@@ -725,7 +771,7 @@ pub async fn embed_chunks<P: EmbeddingProvider>(
         return Ok(Vec::new());
     }
 
-    let batch_size = batch_size.max(1);
+    let batch_size = effective_batch_size(provider, batch_size);
     let total = chunks.len();
     let mut results: Vec<(String, Vec<f32>)> = Vec::with_capacity(total);
 
@@ -776,7 +822,7 @@ pub async fn embed_chunks_concurrent<P: EmbeddingProvider>(
         return Ok(Vec::new());
     }
 
-    let batch_size = batch_size.max(1);
+    let batch_size = effective_batch_size(provider, batch_size);
     let max_concurrent = max_concurrent.max(1);
     let total = chunks.len();
     let total_batches = total.div_ceil(batch_size);
@@ -864,7 +910,7 @@ where
         return Ok(Vec::new());
     }
 
-    let batch_size = batch_size.max(1);
+    let batch_size = effective_batch_size(provider, batch_size);
     let max_concurrent = max_concurrent.max(1);
     let total = chunks.len();
     let total_batches = total.div_ceil(batch_size);
@@ -1126,5 +1172,38 @@ mod tests {
         // Unknown model without '/' won't attempt HF fetch.
         let prefix = default_query_prefix_for_model("some-unknown-model");
         assert!(prefix.is_none());
+    }
+
+    #[test]
+    fn detect_gemini_batch_limit_from_base_url() {
+        let config = EmbeddingProviderConfig::new(
+            "https://generativelanguage.googleapis.com/v1beta/openai".into(),
+            "text-embedding-004".into(),
+            "k".into(),
+        );
+        let provider = OpenAiProvider::new(config).unwrap();
+        assert_eq!(provider.max_batch_size(), Some(100));
+    }
+
+    #[test]
+    fn detect_gemini_batch_limit_from_model_id() {
+        let config = EmbeddingProviderConfig::new(
+            "http://localhost:4000/v1".into(),
+            "gemini-embedding-001".into(),
+            "k".into(),
+        );
+        let provider = OpenAiProvider::new(config).unwrap();
+        assert_eq!(provider.max_batch_size(), Some(100));
+    }
+
+    #[test]
+    fn non_gemini_provider_has_no_batch_limit_override() {
+        let config = EmbeddingProviderConfig::new(
+            "https://api.openai.com/v1".into(),
+            "text-embedding-3-small".into(),
+            "k".into(),
+        );
+        let provider = OpenAiProvider::new(config).unwrap();
+        assert_eq!(provider.max_batch_size(), None);
     }
 }

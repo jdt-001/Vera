@@ -60,6 +60,16 @@ Re-run setup to persist a working configuration:
 vera setup --api
 ```
 
+If the provider returns a batch-size error such as `at most 100 requests can be in one batch`, lower the embedding batch size:
+
+```bash
+vera config set embedding.batch_size 100
+```
+
+Current builds also clamp known provider limits automatically. Gemini embedding endpoints are capped at 100 inputs per request.
+
+If the provider returns `429` or `quota exceeded`, that is a provider-side limit. `embedding.max_concurrent_requests` only reduces how many requests Vera sends in parallel; it does not raise your API quota. Lower concurrency if you are hitting short burst limits, or wait for quota reset / enable billing if the project is out of quota.
+
 ## GPU runs out of memory during indexing
 
 Vera auto-detects VRAM and adjusts batch size, but very low-VRAM GPUs (4 GB or less) may still run out of memory. Use the `--low-vram` flag:
