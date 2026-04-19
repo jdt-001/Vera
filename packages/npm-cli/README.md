@@ -12,40 +12,33 @@ Current benchmark snapshot: on Vera's local 21-task, 4-repo release benchmark, `
 npm install -g @vera-ai/cli
 ```
 
-`vera setup` with no flags runs an interactive wizard (backend + agent skills + optional indexing). For focused changes: `vera backend` manages the ONNX runtime, `vera agent install` manages skill files and can update `AGENTS.md` / `CLAUDE.md` style project instructions, and `vera agent sync` refreshes stale skills after upgrades.
-
-## Usage
+## Quick Start
 
 ```bash
-# Optional: install skill files for your agents
-vera agent install
-
-# Index a project
+vera setup --api
 vera index .
-
-# Search
-vera search "authentication middleware"
-
-# Local ONNX inference (no API keys needed. downloads models automatically)
-vera index . --onnx-jina-cpu
-vera search "error handling" --onnx-jina-cpu
-
-# Optional local CodeRankEmbed preset
-vera setup --code-rank-embed --onnx-jina-cuda
-
-# GPU acceleration (NVIDIA/AMD/DirectML/CoreML/OpenVINO)
-vera index . --onnx-jina-cuda
-
-# Diagnose or repair local setup issues
-vera doctor
-vera doctor --probe
-vera repair
-vera upgrade
+vera search "authentication logic"
 ```
 
-`vera doctor --probe` runs a deeper read-only ONNX session check. `vera upgrade` shows the binary update plan and can apply it when the install method is known.
+`vera setup` with no flags runs an interactive wizard. `vera agent install` manages skill files for your coding agents and can update `AGENTS.md` / `CLAUDE.md` style project instructions.
 
-On GPU backends, Vera uses a free-VRAM-aware batch ceiling and sequence-aware local micro-batching, and it reuses learned device-specific batch windows across runs.
+## Common Tasks
+
+| Task | Command |
+|------|---------|
+| Use the interactive setup wizard | `vera setup` |
+| Use API mode (recommended) | `vera setup --api` |
+| Use a local NVIDIA backend | `vera setup --onnx-jina-cuda` |
+| Search semantically | `vera search "authentication middleware"` |
+| Keep the index up to date | `vera update .` |
+| Watch for file changes | `vera watch .` |
+| Diagnose setup issues | `vera doctor` |
+| Run the deeper ONNX probe | `vera doctor --probe` |
+| Repair missing local assets | `vera repair` |
+| Inspect binary upgrades | `vera upgrade` |
+| Install agent skills | `vera agent install` |
+
+For the full backend matrix, model options, Docker setup, and troubleshooting, see the main [README](https://github.com/lemon07r/Vera) and [Installation Guide](https://github.com/lemon07r/Vera/blob/master/docs/installation.md).
 
 ## What you get
 

@@ -12,40 +12,33 @@ Current benchmark snapshot: on Vera's local 21-task, 4-repo release benchmark, `
 pip install vera-ai
 ```
 
-`vera-ai setup` only configures the backend. Run `vera-ai agent install` to set up skill files for your agents (interactive by default, or pass `--client` and `--scope` for non-interactive use). The interactive flow can also update `AGENTS.md` / `CLAUDE.md` style project instructions for you.
-
-## Usage
+## Quick Start
 
 ```bash
-# Optional: install skill files for your agents
-vera-ai agent install
-
-# Index a project
+vera-ai setup --api
 vera-ai index .
-
-# Search
-vera-ai search "authentication middleware"
-
-# Local ONNX inference (no API keys needed. downloads models automatically)
-vera-ai index . --onnx-jina-cpu
-vera-ai search "error handling" --onnx-jina-cpu
-
-# Optional local CodeRankEmbed preset
-vera-ai setup --code-rank-embed --onnx-jina-cuda
-
-# GPU acceleration (NVIDIA/AMD/DirectML/CoreML/OpenVINO)
-vera-ai index . --onnx-jina-cuda
-
-# Diagnose or repair local setup issues
-vera-ai doctor
-vera-ai doctor --probe
-vera-ai repair
-vera-ai upgrade
+vera-ai search "authentication logic"
 ```
 
-`vera-ai doctor --probe` runs a deeper read-only ONNX session check. `vera-ai upgrade` shows the binary update plan and can apply it when the install method is known.
+`vera-ai setup` only configures the backend. Run `vera-ai agent install` to set up skill files for your agents. The interactive flow can also update `AGENTS.md` / `CLAUDE.md` style project instructions for you.
 
-On GPU backends, Vera uses a free-VRAM-aware batch ceiling and sequence-aware local micro-batching, and it reuses learned device-specific batch windows across runs.
+## Common Tasks
+
+| Task | Command |
+|------|---------|
+| Use API mode (recommended) | `vera-ai setup --api` |
+| Use the interactive setup wizard | `vera-ai setup` |
+| Use a local NVIDIA backend | `vera-ai setup --onnx-jina-cuda` |
+| Search semantically | `vera-ai search "authentication middleware"` |
+| Keep the index up to date | `vera-ai update .` |
+| Watch for file changes | `vera-ai watch .` |
+| Diagnose setup issues | `vera-ai doctor` |
+| Run the deeper ONNX probe | `vera-ai doctor --probe` |
+| Repair missing local assets | `vera-ai repair` |
+| Inspect binary upgrades | `vera-ai upgrade` |
+| Install agent skills | `vera-ai agent install` |
+
+For the full backend matrix, model options, Docker setup, and troubleshooting, see the main [README](https://github.com/lemon07r/Vera) and [Installation Guide](https://github.com/lemon07r/Vera/blob/master/docs/installation.md).
 
 ## What you get
 

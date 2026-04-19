@@ -122,7 +122,36 @@ vera agent install              # interactive: choose scope + agents
 vera agent install --client all # non-interactive: all agents, global
 ```
 
-This is optional but recommended if you use AI coding agents.
+This is optional but recommended if you use AI coding agents. The interactive flow can also update your project's `AGENTS.md`, `CLAUDE.md`, `COPILOT.md`, `.cursorrules`, `.clinerules`, or `.windsurfrules` file with a short Vera usage snippet.
+
+<details>
+<summary>Add the instructions manually</summary>
+
+```markdown
+## Code Search
+
+Use Vera before opening many files or running broad text search when you need to find where logic lives or how a feature works.
+
+- `vera search "query"` for semantic code search. Describe behavior: "JWT validation", not "auth".
+- `vera grep "pattern"` for exact text or regex
+- `vera references <symbol>` for callers and callees
+- `vera overview` for a project summary (languages, entry points, hotspots)
+- `vera search --deep "query"` for query decomposition + parallel search with weighted fusion
+- Narrow results with `--lang`, `--path`, `--type`, or `--scope docs`
+- `vera watch .` to auto-update the index, or `vera update .` after edits (`vera index .` if `.vera/` is missing)
+- For detailed usage, query patterns, and troubleshooting, read the Vera skill file installed by `vera agent install`
+```
+
+</details>
+
+<details>
+<summary>Use the Vercel skills CLI instead</summary>
+
+```bash
+npx skills add lemon07r/Vera
+```
+
+</details>
 
 ## Updating
 

@@ -66,6 +66,8 @@ Vera started after weeks of working on Pampax, a project I forked because it and
 
 ## Installation
 
+Use the quick start above if you just want to get going. This section helps you pick the right backend.
+
 ```bash
 bunx @vera-ai/cli install   # or: npx -y @vera-ai/cli install / uvx vera-ai install
 ```
@@ -100,60 +102,41 @@ Exposes `search_code`, `get_stats`, `get_overview`, and `regex_search` tools. `s
 
 ## Usage
 
+### Core Workflow
+
 ```bash
+vera index .
 vera search "authentication logic"
+vera update .
+```
+
+### Search Patterns
+
+```bash
 vera search "error handling" --lang rust
 vera search "routes" --path "src/**/*.ts"
 vera search "handler" --type function --limit 5
-vera search "config loading" --deep              # query decomposition + parallel search (or iterative symbol-following)
-vera search "auth" --compact                     # signatures only, broad exploration
+vera search "config loading" --deep
+vera search "auth" --compact
 ```
 
-Update the index after code changes: `vera update .`
+### Common Tasks
 
-Keep the index fresh automatically: `vera watch .`
+| Task | Command |
+|------|---------|
+| Regex or exact text | `vera grep "fn\s+main"` |
+| Find callers | `vera references foo` |
+| Find callees | `vera references foo --callees` |
+| Find dead code | `vera dead-code` |
+| Get a project overview | `vera overview` |
+| Keep the index fresh | `vera watch .` |
+| Check your setup | `vera doctor` |
+| Repair missing local assets | `vera repair` |
+| Install agent skills | `vera agent install` |
 
-See the [query guide](docs/query-guide.md) for tips on writing effective queries.
+See the [query guide](docs/query-guide.md) for search tips, the [feature list](docs/features.md) for the full command surface, and `vera --help` for CLI details.
 
-<details>
-<summary>More commands</summary>
-
-```bash
-# Code intelligence
-vera grep "fn\s+main"              # regex search over indexed files
-vera references foo                # find all callers of symbol 'foo'
-vera references foo --callees      # find what 'foo' calls
-vera dead-code                     # find functions with no callers
-vera overview                      # project summary: languages, entry points, hotspots
-
-# Index management
-vera index .                       # index current project
-vera update .                      # re-index changed files
-vera watch .                       # auto-update on file changes (Ctrl-C to stop)
-vera stats                         # index statistics
-
-# Setup and diagnostics
-vera doctor                        # diagnose setup issues
-vera doctor --probe                # deeper read-only ONNX probe
-vera repair                        # re-fetch missing assets
-vera upgrade                       # inspect binary update plan
-vera config                        # show current configuration
-vera backend                       # manage ONNX runtime and model backend
-
-# Agent skills
-vera agent install                 # interactive: choose scope + agents
-vera agent install --client all    # non-interactive: all agents, global
-vera agent status                  # check skill installation status
-vera agent sync                    # refresh stale skill installs
-vera agent remove                  # pick installs to remove
-
-# Cleanup
-vera uninstall                     # removes config dir, skill files, PATH shim
-```
-
-</details>
-
-### Output Format
+### Output
 
 Defaults to markdown codeblocks (the most token-efficient format for AI agents):
 
@@ -183,30 +166,20 @@ Full methodology and version history: [docs/benchmarks.md](docs/benchmarks.md).
 
 ## Configure Your AI Agent
 
-`vera agent install` installs the Vera skill for your coding agents and offers to add a usage snippet to your project's `AGENTS.md`, `CLAUDE.md`, `COPILOT.md`, or editor rules file. Installed agents start preselected in the interactive picker, deselecting one removes its existing Vera skill install, and stale installs can be refreshed in one step before you enter the full picker.
+`vera agent install` installs the Vera skill for supported coding agents and can add a short usage snippet to your project's `AGENTS.md`, `CLAUDE.md`, `COPILOT.md`, or editor rules file.
 
-Alternatively, install the Vera skill with the [skills CLI](https://github.com/vercel-labs/skills):
+```bash
+vera agent install
+vera agent install --client all
+```
+
+If you use the [skills CLI](https://github.com/vercel-labs/skills), you can install Vera there too:
 
 ```bash
 npx skills add lemon07r/Vera
 ```
 
-If you skipped the prompt or want to add it manually:
-
-```markdown
-## Code Search
-
-Use Vera before opening many files or running broad text search when you need to find where logic lives or how a feature works.
-
-- `vera search "query"` for semantic code search. Describe behavior: "JWT validation", not "auth".
-- `vera grep "pattern"` for exact text or regex
-- `vera references <symbol>` for callers and callees
-- `vera overview` for a project summary (languages, entry points, hotspots)
-- `vera search --deep "query"` for query decomposition + parallel search with weighted fusion
-- Narrow results with `--lang`, `--path`, `--type`, or `--scope docs`
-- `vera watch .` to auto-update the index, or `vera update .` after edits (`vera index .` if `.vera/` is missing)
-- For detailed usage, query patterns, and troubleshooting, read the Vera skill file installed by `vera agent install`
-```
+If you skipped the prompt and want to add the instructions manually, use the snippet in the [Installation Guide](docs/installation.md#set-up-agent-skills).
 
 ## Contributing
 
